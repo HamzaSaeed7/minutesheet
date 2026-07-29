@@ -18,7 +18,7 @@
 @inject IJSRuntime JS
 @inject IWebHostEnvironment Env
 @inject NavigationManager NavigationManager
-@inject SmtpEmailSender EmailSender
+@inject EmailQueue EmailQueue
 
 <PageTitle>@(_isEdit ? "Edit Minute Sheet" : "Create Minute Sheet")</PageTitle>
 
@@ -232,7 +232,7 @@ else
     private string _initialDescriptionHtml = "";
 
     private SheetCategory _category = SheetCategory.Financial;
-    private readonly List<ApprovalRow> _rows = new() { new ApprovalRow { Action = ApprovalAction.Approve } };
+    private readonly List<ApprovalRow> _rows = new() { new ApprovalRow { Action = ApprovalAction.Review } };
     private List<string> _approverEmails = new();
     private ApplicationUser? _creator;
     private IBrowserFile? _selectedFile;
@@ -300,7 +300,7 @@ else
                     }
                     if (_rows.Count == 0)
                     {
-                        _rows.Add(new ApprovalRow { Action = ApprovalAction.Approve });
+                        _rows.Add(new ApprovalRow { Action = ApprovalAction.Review });
                     }
                 }
             }
@@ -488,11 +488,11 @@ else
                 {
                     foreach (var email in _rows.Select(r => r.ApproverEmail).Distinct(StringComparer.OrdinalIgnoreCase))
                     {
-                        await EmailSender.SendSheetNotificationAsync(
+                        EmailQueue.Enqueue(new EmailJob(
                             email,
                             "A minute sheet was updated",
                             $"{createdBy} updated a minute sheet that needs your review or approval.",
-                            link);
+                            link));
                     }
                 }
 
@@ -527,15 +527,15 @@ else
                 await DbContext.SaveChangesAsync();
                 sheetToken = sheet.Token;
 
-                // Email the unique sheet link to each distinct approver.
+                // Queue the unique sheet link to each distinct approver.
                 link = NavigationManager.ToAbsoluteUri($"dashboard/sheet/{sheetToken}").AbsoluteUri;
                 foreach (var email in _rows.Select(r => r.ApproverEmail).Distinct(StringComparer.OrdinalIgnoreCase))
                 {
-                    await EmailSender.SendSheetNotificationAsync(
+                    EmailQueue.Enqueue(new EmailJob(
                         email,
                         "A minute sheet needs your approval",
                         $"{createdBy} submitted a minute sheet that needs your review or approval.",
-                        link);
+                        link));
                 }
 
                 NavigationManager.NavigateTo("dashboard/history");

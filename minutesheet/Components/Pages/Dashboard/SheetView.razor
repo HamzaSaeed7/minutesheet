@@ -13,7 +13,7 @@
 
 @inject IConfiguration Configuration
 @inject UserManager<ApplicationUser> UserManager
-@inject SmtpEmailSender EmailSender
+@inject EmailQueue EmailQueue
 @inject NavigationManager NavigationManager
 @inject IWebHostEnvironment Env
 @inject IJSRuntime JS
@@ -107,12 +107,15 @@ else
 
         @{
             var maxStep = _sheet.ApprovalSteps.Count == 0 ? 0 : _sheet.ApprovalSteps.Max(s => s.StepIndex);
+            var currentStep = ApprovalWorkflow.CurrentStep(_sheet.ApprovalSteps);
         }
         <div class="timeline">
             @foreach (var step in _sheet.ApprovalSteps.OrderBy(s => s.StepIndex))
             {
                 var mineActionable = _myActionableSteps.Any(s => s.Id == step.Id);
-                var canResolve = _isCreator && step.Status == ApprovalStepStatus.Reviewed;
+                var isCurrent = currentStep is not null && currentStep.StepIndex == step.StepIndex;
+                var isWaiting = step.Status != ApprovalStepStatus.Approved && !isCurrent;
+                var canResolve = _isCreator && step.Status == ApprovalStepStatus.Reviewed && isCurrent;
                 <div class="tl-step">
                     <div class="tl-rail">
                         <div class="tl-dot @DotClass(step.Status)">@step.StepIndex</div>
@@ -128,7 +131,18 @@ else
                             <span class="badge @StepStatusClass(step.Status)">@DisplayName(step.Status)</span>
                         </div>
                         <div style="font-size:12.5px;color:#9296ab;margin-top:4px;">
-                            @(step.ActedAt is null ? "Awaiting action" : $"Acted {step.ActedAt.Value.ToLocalTime():dd MMM yyyy, HH:mm}")
+                            @if (step.ActedAt is not null)
+                            {
+                                @($"Acted {step.ActedAt.Value.ToLocalTime():dd MMM yyyy, HH:mm}")
+                            }
+                            else if (isWaiting)
+                            {
+                                @($"Waiting for step {currentStep!.StepIndex}")
+                            }
+                            else
+                            {
+                                @("Awaiting action")
+                            }
                         </div>
 
                         @if (mineActionable)
@@ -256,11 +270,14 @@ else
         _canView = _isCreator || isApprover;
 
         _currentStatus = ApprovalWorkflow.StatusFor(_sheet);
-        _myActionableSteps = _sheet.ApprovalSteps
-            .Where(s => string.Equals(s.ApproverEmail, myEmail, StringComparison.OrdinalIgnoreCase)
-                        && s.Status != ApprovalStepStatus.Approved)
-            .OrderBy(s => s.StepIndex)
-            .ToList();
+
+        // Hierarchical workflow: only the current step's approver can act, and only
+        // once every earlier step has been approved.
+        var current = ApprovalWorkflow.CurrentStep(_sheet.ApprovalSteps);
+        _myActionableSteps = current is not null
+            && string.Equals(current.ApproverEmail, myEmail, StringComparison.OrdinalIgnoreCase)
+                ? new List<ApprovalStep> { current }
+                : new List<ApprovalStep>();
 
         // Bump the epoch so action zones are re-keyed and their textareas reset.
         _epoch++;
@@ -289,6 +306,12 @@ else
                 .FirstOrDefaultAsync(m => m.Token == Token);
             var step = sheet?.ApprovalSteps.FirstOrDefault(s => s.Id == stepId);
             if (sheet is null || step is null) { _busy = false; return; }
+            if (!ApprovalWorkflow.IsActionable(step, sheet.ApprovalSteps))
+            {
+                _error = "An earlier approval step is still open, so this step can't be actioned yet.";
+                _busy = false;
+                return;
+            }
 
             step.Status = ApprovalStepStatus.Reviewed;
             step.ActedAt = DateTime.UtcNow;
@@ -311,11 +334,11 @@ else
 
         if (!string.IsNullOrEmpty(creatorEmail))
         {
-            await EmailSender.SendSheetNotificationAsync(
+            EmailQueue.Enqueue(new EmailJob(
                 creatorEmail,
                 "A review was left on your minute sheet",
                 $"{MyName()} reviewed your minute sheet and left a comment to resolve.",
-                NavigationManager.Uri);
+                NavigationManager.Uri));
         }
         _busy = false;
     }
@@ -336,6 +359,12 @@ else
                 .FirstOrDefaultAsync(m => m.Token == Token);
             var step = sheet?.ApprovalSteps.FirstOrDefault(s => s.Id == stepId);
             if (sheet is null || step is null) { _busy = false; return; }
+            if (!ApprovalWorkflow.IsActionable(step, sheet.ApprovalSteps))
+            {
+                _error = "An earlier approval step is still open, so this step can't be actioned yet.";
+                _busy = false;
+                return;
+            }
 
             step.Status = ApprovalStepStatus.Approved;
             step.ActedAt = DateTime.UtcNow;
@@ -362,11 +391,11 @@ else
 
         if (fullyApproved && !string.IsNullOrEmpty(creatorEmail))
         {
-            await EmailSender.SendSheetNotificationAsync(
+            EmailQueue.Enqueue(new EmailJob(
                 creatorEmail,
                 "Your minute sheet is fully approved",
                 "All approvers have approved your minute sheet.",
-                NavigationManager.Uri);
+                NavigationManager.Uri));
         }
         _busy = false;
     }
@@ -415,11 +444,11 @@ else
 
         if (!string.IsNullOrEmpty(approverEmail))
         {
-            await EmailSender.SendSheetNotificationAsync(
+            EmailQueue.Enqueue(new EmailJob(
                 approverEmail,
                 "Your review was resolved",
                 $"{MyName()} resolved your review. Please take another look and review or approve.",
-                NavigationManager.Uri);
+                NavigationManager.Uri));
         }
         _busy = false;
     }
