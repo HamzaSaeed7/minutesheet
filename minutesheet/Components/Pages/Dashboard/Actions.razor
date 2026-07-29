@@ -89,11 +89,18 @@ else
 
         var myEmail = user.Email ?? "";
 
-        _pending = await DbContext.ApprovalSteps
+        var mySteps = await DbContext.ApprovalSteps
             .Where(s => s.ApproverEmail == myEmail && s.Status != ApprovalStepStatus.Approved)
             .Include(s => s.MinuteSheet!).ThenInclude(m => m.CreatedByUser)
+            .Include(s => s.MinuteSheet!).ThenInclude(m => m.ApprovalSteps)
             .OrderByDescending(s => s.MinuteSheet!.CreatedAt)
             .ToListAsync();
+
+        // Hierarchical workflow: a step only reaches its approver once every earlier
+        // step has been approved.
+        _pending = mySteps
+            .Where(s => ApprovalWorkflow.IsActionable(s, s.MinuteSheet!.ApprovalSteps))
+            .ToList();
 
         _toResolve = await DbContext.MinuteSheets
             .Where(m => m.CreatedByUserId == user.Id

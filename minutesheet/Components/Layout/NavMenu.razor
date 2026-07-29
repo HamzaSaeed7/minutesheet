@@ -123,8 +123,12 @@
             _initials = Initials(user.FullName, user.Email);
 
             var email = user.Email ?? "";
-            _pendingCount = await db.ApprovalSteps
-                .CountAsync(s => s.ApproverEmail == email && s.Status != ApprovalStepStatus.Approved);
+            // Hierarchical workflow: only count steps whose turn has actually come up.
+            var mySteps = await db.ApprovalSteps
+                .Where(s => s.ApproverEmail == email && s.Status != ApprovalStepStatus.Approved)
+                .Include(s => s.MinuteSheet!).ThenInclude(m => m.ApprovalSteps)
+                .ToListAsync();
+            _pendingCount = mySteps.Count(s => ApprovalWorkflow.IsActionable(s, s.MinuteSheet!.ApprovalSteps));
         }
     }
 

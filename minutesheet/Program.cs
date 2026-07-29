@@ -38,6 +38,10 @@ builder.Services.AddHttpClient();
 builder.Services.AddSingleton<SmtpEmailSender>();
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>>(sp => sp.GetRequiredService<SmtpEmailSender>());
 
+// Notification mail is delivered off the request path so workflow actions stay snappy.
+builder.Services.AddSingleton<EmailQueue>();
+builder.Services.AddHostedService<EmailBackgroundService>();
+
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.

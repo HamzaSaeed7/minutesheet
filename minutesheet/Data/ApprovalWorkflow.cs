@@ -10,6 +10,21 @@ namespace minutesheet.Data
         public static bool IsFullyApproved(ICollection<ApprovalStep> steps) =>
             steps.Count > 0 && steps.All(s => s.Status == ApprovalStepStatus.Approved);
 
+        // Approvals are hierarchical: they run in step order. Only the lowest-numbered
+        // step that isn't approved yet is open for action; every later step waits for
+        // it. Returns null once the whole sheet is approved.
+        public static ApprovalStep? CurrentStep(IEnumerable<ApprovalStep> steps) =>
+            steps.Where(s => s.Status != ApprovalStepStatus.Approved)
+                 .OrderBy(s => s.StepIndex)
+                 .FirstOrDefault();
+
+        // True when this step is the one currently open for action.
+        public static bool IsActionable(ApprovalStep step, IEnumerable<ApprovalStep> steps)
+        {
+            var current = CurrentStep(steps);
+            return current is not null && current.StepIndex == step.StepIndex;
+        }
+
         public static string StatusFor(MinuteSheet sheet) =>
             IsFullyApproved(sheet.ApprovalSteps) ? "Approved" : "Pending";
     }
