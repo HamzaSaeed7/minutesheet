@@ -1,0 +1,249 @@
+@page "/settings/two-factor"
+
+@using System.ComponentModel.DataAnnotations
+@using System.Globalization
+@using System.Text
+@using System.Text.Encodings.Web
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using QRCoder
+@using minutesheet.Components.Account
+@using minutesheet.Data
+
+@attribute [Authorize]
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject IdentityUserAccessor UserAccessor
+@inject UrlEncoder UrlEncoder
+@inject ILogger<TwoFactor> Logger
+
+<PageTitle>Two-factor authentication</PageTitle>
+
+<a href="settings" class="back-link">&larr; Back to settings</a>
+<h1 class="page-title">Two-factor authentication</h1>
+
+@if (!string.IsNullOrEmpty(_message))
+{
+    <div style="max-width:640px;"><div class="alert alert-success">@_message</div></div>
+}
+
+@if (_recoveryCodes is not null)
+{
+    <div class="content-card settings-card narrow" style="margin-bottom:20px;">
+        <div style="font-size:16px;font-weight:600;color:#14173a;margin-bottom:2px;">Your recovery codes</div>
+        <div class="alert alert-warning" style="margin:12px 0;">
+            Save these somewhere safe now — <strong>each code works once</strong> and they won't be shown again.
+        </div>
+        <div class="recovery-grid">
+            @foreach (var rc in _recoveryCodes)
+            {
+                <code>@rc</code>
+            }
+        </div>
+    </div>
+}
+
+@if (_is2faEnabled)
+{
+    <div class="content-card settings-card narrow">
+        <div class="d-flex align-items-start justify-content-between" style="gap:16px;">
+            <div>
+                <div style="font-size:16px;font-weight:600;color:#14173a;margin-bottom:2px;">Authenticator app</div>
+                <div style="font-size:13px;color:#9296ab;">Your account is protected by two-factor authentication.</div>
+            </div>
+            <span class="badge bg-success">Enabled</span>
+        </div>
+
+        <div style="font-size:13.5px;color:#565b78;margin:16px 0;">
+            You have <strong>@_recoveryLeft</strong> recovery code@(_recoveryLeft == 1 ? "" : "s") remaining.
+            Recovery codes let you sign in if you lose access to your authenticator device.
+        </div>
+
+        <div class="d-flex gap-2 flex-wrap">
+            <EditForm Model="Regen" FormName="regen" OnValidSubmit="OnRegen" method="post">
+                <button type="submit" class="btn btn-outline-primary">Regenerate recovery codes</button>
+            </EditForm>
+            <EditForm Model="Disable" FormName="disable" OnValidSubmit="OnDisable" method="post">
+                <button type="submit" class="btn btn-danger">Disable 2FA</button>
+            </EditForm>
+        </div>
+    </div>
+}
+else
+{
+    <div class="content-card settings-card narrow">
+        <div style="font-size:16px;font-weight:600;color:#14173a;margin-bottom:2px;">Set up authenticator app</div>
+        <div style="font-size:13px;color:#9296ab;margin-bottom:18px;">
+            Use an app like Google Authenticator or Microsoft Authenticator.
+        </div>
+
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="alert alert-danger">@_error</div>
+        }
+
+        <div class="d-flex flex-wrap" style="gap:24px;align-items:flex-start;margin-bottom:8px;">
+            @if (!string.IsNullOrEmpty(_qrDataUri))
+            {
+                <img src="@_qrDataUri" alt="Authenticator QR code" class="qr-img" />
+            }
+            <div style="flex:1;min-width:220px;">
+                <ol style="padding-left:18px;color:#565b78;font-size:13.5px;line-height:1.9;margin:0;">
+                    <li>Open your authenticator app and <strong>scan the QR code</strong>.</li>
+                    <li>
+                        Can't scan? Enter this key manually:
+                        <div class="setup-key">@_sharedKey</div>
+                    </li>
+                    <li>Enter the 6-digit code the app shows below.</li>
+                </ol>
+            </div>
+        </div>
+
+        <EditForm Model="Verify" FormName="verify" OnValidSubmit="OnVerify" method="post">
+            <DataAnnotationsValidator />
+            <div class="field-label" style="margin-top:8px;">Verification code</div>
+            <InputText @bind-Value="Verify.Code" class="form-control otp-input" style="max-width:220px;"
+                       autocomplete="one-time-code" inputmode="numeric" placeholder="000000" />
+            <ValidationMessage For="() => Verify.Code" class="text-danger" />
+            <button type="submit" class="btn btn-primary" style="border-radius:10px;padding:12px 24px;margin-top:14px;">Verify &amp; enable</button>
+        </EditForm>
+    </div>
+}
+
+@code {
+    [CascadingParameter] private HttpContext HttpContext { get; set; } = default!;
+
+    private ApplicationUser _user = default!;
+    private bool _is2faEnabled;
+    private int _recoveryLeft;
+    private string? _sharedKey;
+    private string? _authenticatorUri;
+    private string? _qrDataUri;
+    private string[]? _recoveryCodes;
+    private string? _message;
+    private string? _error;
+
+    // Null-safe models: with multiple forms on one page, Blazor SSR nulls the
+    // models of the forms that weren't submitted during a POST.
+    private VerifyModel _verify = new();
+    [SupplyParameterFromForm(FormName = "verify")]
+    private VerifyModel Verify { get => _verify; set => _verify = value ?? new(); }
+
+    private EmptyModel _disable = new();
+    [SupplyParameterFromForm(FormName = "disable")]
+    private EmptyModel Disable { get => _disable; set => _disable = value ?? new(); }
+
+    private EmptyModel _regen = new();
+    [SupplyParameterFromForm(FormName = "regen")]
+    private EmptyModel Regen { get => _regen; set => _regen = value ?? new(); }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = await UserAccessor.GetRequiredUserAsync(HttpContext);
+        await ReloadStateAsync();
+    }
+
+    private async Task ReloadStateAsync()
+    {
+        _is2faEnabled = await UserManager.GetTwoFactorEnabledAsync(_user);
+        _recoveryLeft = await UserManager.CountRecoveryCodesAsync(_user);
+        if (!_is2faEnabled)
+        {
+            await LoadSharedKeyAsync();
+        }
+    }
+
+    private async Task LoadSharedKeyAsync()
+    {
+        var key = await UserManager.GetAuthenticatorKeyAsync(_user);
+        if (string.IsNullOrEmpty(key))
+        {
+            await UserManager.ResetAuthenticatorKeyAsync(_user);
+            key = await UserManager.GetAuthenticatorKeyAsync(_user);
+        }
+        _sharedKey = FormatKey(key!);
+        var email = await UserManager.GetEmailAsync(_user);
+        _authenticatorUri = string.Format(
+            CultureInfo.InvariantCulture,
+            "otpauth://totp/{0}:{1}?secret={2}&issuer={0}&digits=6",
+            UrlEncoder.Encode("Minute Sheet"), UrlEncoder.Encode(email!), key);
+
+        // Render the QR server-side (PngByteQRCode has no System.Drawing dependency).
+        using var qrGenerator = new QRCodeGenerator();
+        using var qrData = qrGenerator.CreateQrCode(_authenticatorUri, QRCodeGenerator.ECCLevel.Q);
+        var png = new PngByteQRCode(qrData).GetGraphic(6);
+        _qrDataUri = $"data:image/png;base64,{Convert.ToBase64String(png)}";
+    }
+
+    private async Task OnVerify()
+    {
+        _error = null;
+        var code = Verify.Code.Replace(" ", string.Empty).Replace("-", string.Empty);
+        var valid = await UserManager.VerifyTwoFactorTokenAsync(
+            _user, UserManager.Options.Tokens.AuthenticatorTokenProvider, code);
+
+        if (!valid)
+        {
+            _error = "That code is invalid. Check your device's clock and enter the current 6-digit code.";
+            return;
+        }
+
+        await UserManager.SetTwoFactorEnabledAsync(_user, true);
+        await SignInManager.RefreshSignInAsync(_user);
+        Logger.LogInformation("User with ID '{UserId}' enabled 2FA via authenticator app.", _user.Id);
+        _message = "Two-factor authentication is now enabled.";
+
+        if (await UserManager.CountRecoveryCodesAsync(_user) == 0)
+        {
+            var codes = await UserManager.GenerateNewTwoFactorRecoveryCodesAsync(_user, 10);
+            _recoveryCodes = codes?.ToArray();
+        }
+        await ReloadStateAsync();
+    }
+
+    private async Task OnDisable()
+    {
+        await UserManager.SetTwoFactorEnabledAsync(_user, false);
+        await UserManager.ResetAuthenticatorKeyAsync(_user);
+        await SignInManager.RefreshSignInAsync(_user);
+        Logger.LogInformation("User with ID '{UserId}' disabled 2FA.", _user.Id);
+        _message = "Two-factor authentication has been disabled.";
+        _recoveryCodes = null;
+        await ReloadStateAsync();
+    }
+
+    private async Task OnRegen()
+    {
+        var codes = await UserManager.GenerateNewTwoFactorRecoveryCodesAsync(_user, 10);
+        _recoveryCodes = codes?.ToArray();
+        _message = "New recovery codes generated. Your previous codes no longer work.";
+        await ReloadStateAsync();
+    }
+
+    private static string FormatKey(string key)
+    {
+        var sb = new StringBuilder();
+        var i = 0;
+        while (i + 4 < key.Length)
+        {
+            sb.Append(key.AsSpan(i, 4)).Append(' ');
+            i += 4;
+        }
+        if (i < key.Length)
+        {
+            sb.Append(key.AsSpan(i));
+        }
+        return sb.ToString().ToLowerInvariant();
+    }
+
+    private sealed class VerifyModel
+    {
+        [Required]
+        [RegularExpression(@"^\d{6}$", ErrorMessage = "Enter the 6-digit code.")]
+        [Display(Name = "Verification code")]
+        public string Code { get; set; } = "";
+    }
+
+    private sealed class EmptyModel { }
+}

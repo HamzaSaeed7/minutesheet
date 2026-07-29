@@ -1,0 +1,610 @@
+@page "/dashboard/create"
+@page "/dashboard/sheet/{Token:guid}/edit"
+@rendermode InteractiveServer
+@implements IAsyncDisposable
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using minutesheet.Data
+@using minutesheet.Components.Account
+
+@attribute [Authorize]
+
+@inject ApplicationDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject IJSRuntime JS
+@inject IWebHostEnvironment Env
+@inject NavigationManager NavigationManager
+@inject SmtpEmailSender EmailSender
+
+<PageTitle>@(_isEdit ? "Edit Minute Sheet" : "Create Minute Sheet")</PageTitle>
+
+@if (_isEdit && _loading)
+{
+    <h1 class="page-title">Edit minute sheet</h1>
+    <div class="content-card"><p class="mb-0">Loading...</p></div>
+}
+else if (_isEdit && !_canEdit)
+{
+    <h1 class="page-title">Edit minute sheet</h1>
+    <div class="content-card">
+        <div class="alert alert-danger mb-0">@(_error ?? "This minute sheet can no longer be edited.")</div>
+    </div>
+}
+else
+{
+<h1 class="page-title">@(_workflowLocked ? "Update description & attachment" : (_isEdit ? "Edit minute sheet" : "Create a new minute sheet"))</h1>
+
+<div class="create-grid">
+    <div class="create-col">
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="alert alert-danger mb-0">@_error</div>
+        }
+
+        <div class="content-card">
+            <div class="card-eyebrow" style="margin-bottom:10px;">Category</div>
+            <div class="seg-tabs">
+                <button type="button" class="seg-tab @(_category == SheetCategory.Financial ? "active" : "")" @onclick="() => _category = SheetCategory.Financial">Financial</button>
+                <button type="button" class="seg-tab @(_category == SheetCategory.NonFinancial ? "active" : "")" @onclick="() => _category = SheetCategory.NonFinancial">Non-Financial</button>
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="card-eyebrow" style="margin-bottom:10px;">Description</div>
+            <div id="editor" style="min-height:180px;"></div>
+        </div>
+
+        <div class="content-card">
+            <div class="card-eyebrow" style="margin-bottom:10px;">Attachment</div>
+            <div class="dropzone">
+                <InputFile class="dropzone-file" OnChange="OnFileSelected" accept=".pdf,.doc,.docx" />
+                @if (_selectedFile is null && _isEdit && !string.IsNullOrEmpty(_existingAttachmentName))
+                {
+                    <div class="dropzone-text">
+                        <span class="dropzone-link">@_existingAttachmentName</span> (current attachment)<br />
+                        Click to replace
+                    </div>
+                }
+                else if (_selectedFile is null)
+                {
+                    <div class="dropzone-text">
+                        PDF or Word (.doc / .docx), up to 10&nbsp;MB<br />
+                        <span class="dropzone-link">Click to browse</span> or drag a file here
+                    </div>
+                }
+                else
+                {
+                    <div class="dropzone-text">
+                        <span class="dropzone-link">@_selectedFile.Name</span> (@(_selectedFile.Size / 1024) KB)<br />
+                        Click to replace
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="d-flex align-items-center justify-content-between" style="margin-bottom:16px;">
+                <div class="card-eyebrow">Approval workflow</div>
+                @if (!_workflowLocked)
+                {
+                    <div class="d-flex align-items-center" style="gap:8px;">
+                        <input type="number" min="1" max="@MaxApprovals" class="form-control form-control-sm wf-count"
+                               value="@_rows.Count" @onchange="OnRowCountChanged" aria-label="Total number of approval rows" />
+                        <button type="button" class="add-step" @onclick="AddRow">+ Add</button>
+                    </div>
+                }
+            </div>
+
+            @if (_workflowLocked)
+            {
+                <div class="d-flex flex-column" style="gap:10px;">
+                    @foreach (var step in _lockedSteps)
+                    {
+                        <div class="wf-row">
+                            <div class="wf-num">@step.Index</div>
+                            <span class="wf-chip @(step.Action == ApprovalAction.Approve ? "approve" : "review")">@(step.Action == ApprovalAction.Approve ? "Approve" : "Review")</span>
+                            <span style="flex:1;min-width:0;color:#565b78;font-size:13px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">@step.Approver</span>
+                            <span class="badge @LockedStatusClass(step.Status)">@LockedStatusName(step.Status)</span>
+                        </div>
+                    }
+                </div>
+                <div style="font-size:12.5px;color:#9296ab;margin-top:12px;">Approvals are in progress, so the workflow is locked. You can still update the description and attachment.</div>
+            }
+            else
+            {
+                <div class="d-flex flex-column" style="gap:10px;">
+                    @for (int i = 0; i < _rows.Count; i++)
+                    {
+                        var row = _rows[i];
+                        var isLast = i == _rows.Count - 1;
+                        <div class="wf-row">
+                            <div class="wf-num">@(i + 1)</div>
+                            @if (isLast)
+                            {
+                                <span class="wf-chip approve">Approve</span>
+                            }
+                            else
+                            {
+                                <select class="form-select form-select-sm wf-action" @bind="row.Action">
+                                    <option value="@ApprovalAction.Review">Review</option>
+                                    <option value="@ApprovalAction.Approve">Approve</option>
+                                </select>
+                            }
+                            <select class="form-select form-select-sm" style="flex:1;" @bind="row.ApproverEmail">
+                                <option value="">-- select approver --</option>
+                                @foreach (var email in _approverEmails)
+                                {
+                                    <option value="@email">@email</option>
+                                }
+                            </select>
+                            @if (_rows.Count > 1)
+                            {
+                                <button type="button" class="wf-remove" @onclick="() => RemoveRow(row)">&times;</button>
+                            }
+                        </div>
+                    }
+                </div>
+                <div style="font-size:12.5px;color:#9296ab;margin-top:12px;">The last step is always the final approval.</div>
+            }
+        </div>
+
+        <div class="d-flex justify-content-end" style="gap:10px;">
+            <a href="@(_isEdit ? $"dashboard/sheet/{Token}" : "dashboard/history")" class="btn-cancel">Cancel</a>
+            <button type="button" class="btn btn-primary" style="border-radius:10px;padding:12px 26px;" @onclick="Save" disabled="@_saving">
+                @(_saving ? "Saving..." : (_isEdit ? "Save changes" : "Submit sheet"))
+            </button>
+        </div>
+    </div>
+
+    <div class="d-flex flex-column" style="gap:16px;">
+        @if (_creator is not null)
+        {
+            <div class="prepared-card">
+                <div class="card-eyebrow" style="margin-bottom:14px;">Prepared by</div>
+                <div class="d-flex align-items-center" style="gap:12px;">
+                    <div class="prepared-avatar">
+                        @if (!string.IsNullOrEmpty(_creator.AvatarPath))
+                        {
+                            <img src="@($"/{_creator.AvatarPath}")" alt="Profile picture" />
+                        }
+                        else
+                        {
+                            @Initials(_creator.FullName, _creator.Email)
+                        }
+                    </div>
+                    <div style="min-width:0;">
+                        <div style="font-weight:600;font-size:14px;color:#1a1d2e;">@(string.IsNullOrWhiteSpace(_creator.FullName) ? _creator.Email : _creator.FullName)</div>
+                        <div style="font-size:12.5px;color:#9296ab;">@DesignationName(_creator.Designation)</div>
+                    </div>
+                </div>
+                <div style="margin-top:14px;padding-top:14px;border-top:1px solid #f0f1f7;font-size:13px;color:#767b94;" class="d-flex flex-column gap-1">
+                    @if (!string.IsNullOrEmpty(_creator.Department?.Name))
+                    {
+                        <div>@_creator.Department!.Name</div>
+                    }
+                    @if (!string.IsNullOrEmpty(_creator.EmployeeNo))
+                    {
+                        <div>Emp #@_creator.EmployeeNo</div>
+                    }
+                    <div>@_creator.Email</div>
+                </div>
+            </div>
+        }
+        <div class="info-note">
+            @if (_workflowLocked)
+            {
+                <text>Approvals are already in progress. Updating the description or attachment here doesn't change the approval steps — use <strong>Resolve</strong> on the sheet to send a reviewed step back to its approver.</text>
+            }
+            else if (_isEdit)
+            {
+                <text>Saving will notify all approvers by email that the sheet was updated.</text>
+            }
+            else
+            {
+                <text>Approvers are notified by email as soon as you submit. Review steps require a comment before moving on; approval steps don't.</text>
+            }
+        </div>
+    </div>
+</div>
+}
+
+@code {
+    private sealed class ApprovalRow
+    {
+        public ApprovalAction Action { get; set; } = ApprovalAction.Review;
+        public string ApproverEmail { get; set; } = "";
+    }
+
+    [Parameter] public Guid? Token { get; set; }
+
+    private bool _isEdit => Token.HasValue;
+    private bool _loading = true;
+    private bool _canEdit;
+    private bool _workflowLocked;
+    private readonly List<(int Index, string Approver, ApprovalAction Action, ApprovalStepStatus Status)> _lockedSteps = new();
+    private bool _editorInitialized;
+    private string? _existingAttachmentName;
+    private string? _existingAttachmentPath;
+    private string _initialDescriptionHtml = "";
+
+    private SheetCategory _category = SheetCategory.Financial;
+    private readonly List<ApprovalRow> _rows = new() { new ApprovalRow { Action = ApprovalAction.Approve } };
+    private List<string> _approverEmails = new();
+    private ApplicationUser? _creator;
+    private IBrowserFile? _selectedFile;
+    private string? _error;
+    private bool _saving;
+
+    private const int MaxApprovals = 20;
+    private static readonly string[] AllowedExtensions = { ".pdf", ".doc", ".docx" };
+    private const long MaxFileSize = 10 * 1024 * 1024; // 10 MB
+
+    protected override async Task OnInitializedAsync()
+    {
+        _approverEmails = await DbContext.Users
+            .Where(u => u.Email != null)
+            .Select(u => u.Email!)
+            .OrderBy(e => e)
+            .ToListAsync();
+
+        var authState = await AuthState;
+        var userId = UserManager.GetUserId(authState.User);
+
+        if (_isEdit)
+        {
+            var sheet = await DbContext.MinuteSheets
+                .Include(m => m.ApprovalSteps)
+                .FirstOrDefaultAsync(m => m.Token == Token);
+
+            if (sheet is null)
+            {
+                _canEdit = false;
+                _error = "This minute sheet could not be found.";
+            }
+            else if (sheet.CreatedByUserId != userId)
+            {
+                _canEdit = false;
+                _error = "You don't have access to edit this minute sheet.";
+            }
+            else
+            {
+                var allPending = sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending);
+                var hasReviews = sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed);
+
+                // Full edit while every step is still pending; once an approver has
+                // left a review to resolve, allow a limited edit (description +
+                // attachment only) with the workflow locked.
+                _canEdit = allPending || hasReviews;
+                _workflowLocked = _canEdit && !allPending;
+
+                if (!_canEdit)
+                {
+                    _error = "This minute sheet can no longer be edited because it has been approved.";
+                }
+                else
+                {
+                    _category = sheet.Category;
+                    _initialDescriptionHtml = sheet.DescriptionHtml;
+                    _existingAttachmentName = sheet.AttachmentFileName;
+                    _existingAttachmentPath = sheet.AttachmentStoredPath;
+                    _rows.Clear();
+                    _lockedSteps.Clear();
+                    foreach (var step in sheet.ApprovalSteps.OrderBy(s => s.StepIndex))
+                    {
+                        _rows.Add(new ApprovalRow { Action = step.Action, ApproverEmail = step.ApproverEmail });
+                        _lockedSteps.Add((step.StepIndex, step.ApproverEmail, step.Action, step.Status));
+                    }
+                    if (_rows.Count == 0)
+                    {
+                        _rows.Add(new ApprovalRow { Action = ApprovalAction.Approve });
+                    }
+                }
+            }
+        }
+
+        if (userId is not null)
+        {
+            _creator = await DbContext.Users
+                .Include(u => u.Department)
+                .FirstOrDefaultAsync(u => u.Id == userId);
+        }
+
+        _loading = false;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_editorInitialized && !_loading && (!_isEdit || _canEdit))
+        {
+            _editorInitialized = true;
+            await JS.InvokeVoidAsync("quillInterop.init", "editor", _initialDescriptionHtml);
+        }
+    }
+
+    private void AddRow()
+    {
+        if (_rows.Count < MaxApprovals)
+        {
+            _rows.Add(new ApprovalRow { Action = ApprovalAction.Review });
+        }
+    }
+
+    // The count input reflects the total number of rows. Typing a number resizes
+    // the table to match (adding Review rows or trimming from the end), clamped
+    // to [1, MaxApprovals]. The input's displayed value re-binds to _rows.Count.
+    private void OnRowCountChanged(ChangeEventArgs e)
+    {
+        if (!int.TryParse(e.Value?.ToString(), out var target))
+        {
+            return;
+        }
+
+        target = Math.Clamp(target, 1, MaxApprovals);
+
+        while (_rows.Count < target)
+        {
+            _rows.Add(new ApprovalRow { Action = ApprovalAction.Review });
+        }
+        while (_rows.Count > target)
+        {
+            _rows.RemoveAt(_rows.Count - 1);
+        }
+    }
+
+    private void RemoveRow(ApprovalRow row)
+    {
+        _rows.Remove(row);
+    }
+
+    private void OnFileSelected(InputFileChangeEventArgs e)
+    {
+        _error = null;
+        var file = e.File;
+        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        if (!AllowedExtensions.Contains(ext))
+        {
+            _error = "Only PDF and Word (.doc/.docx) files are allowed.";
+            _selectedFile = null;
+            return;
+        }
+        if (file.Size > MaxFileSize)
+        {
+            _error = "File exceeds the 10 MB limit.";
+            _selectedFile = null;
+            return;
+        }
+        _selectedFile = file;
+    }
+
+    private async Task Save()
+    {
+        _error = null;
+        _saving = true;
+        try
+        {
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+
+            if (string.IsNullOrWhiteSpace(descriptionHtml))
+            {
+                _error = "Please enter a description.";
+                return;
+            }
+
+            if (!_workflowLocked && _rows.Any(r => string.IsNullOrWhiteSpace(r.ApproverEmail)))
+            {
+                _error = "Please select an approver email for every approval row.";
+                return;
+            }
+
+            var authState = await AuthState;
+            var user = await UserManager.GetUserAsync(authState.User);
+            if (user is null)
+            {
+                _error = "Your session has expired. Please log in again.";
+                return;
+            }
+
+            string? storedPath = null;
+            string? originalName = null;
+            if (_selectedFile is not null)
+            {
+                var ext = Path.GetExtension(_selectedFile.Name).ToLowerInvariant();
+                var uploadsDir = Path.Combine(Env.WebRootPath, "uploads");
+                Directory.CreateDirectory(uploadsDir);
+                var storedName = $"{Guid.NewGuid():N}{ext}";
+                var fullPath = Path.Combine(uploadsDir, storedName);
+                await using (var fs = new FileStream(fullPath, FileMode.Create))
+                {
+                    await _selectedFile.OpenReadStream(MaxFileSize).CopyToAsync(fs);
+                }
+                storedPath = $"uploads/{storedName}";
+                originalName = _selectedFile.Name;
+            }
+
+            string createdBy = string.IsNullOrWhiteSpace(user.FullName) ? user.Email ?? "" : user.FullName;
+            string link;
+            Guid sheetToken;
+
+            if (_isEdit)
+            {
+                var sheet = await DbContext.MinuteSheets
+                    .Include(m => m.ApprovalSteps)
+                    .FirstOrDefaultAsync(m => m.Token == Token);
+
+                var allPending = sheet is not null && sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending);
+                var hasReviews = sheet is not null && sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed);
+
+                if (sheet is null || sheet.CreatedByUserId != user.Id || !(allPending || hasReviews))
+                {
+                    _error = "This minute sheet can no longer be edited.";
+                    return;
+                }
+
+                if (_selectedFile is not null)
+                {
+                    if (!string.IsNullOrEmpty(sheet.AttachmentStoredPath))
+                    {
+                        var oldPath = Path.Combine(Env.WebRootPath, sheet.AttachmentStoredPath);
+                        if (File.Exists(oldPath))
+                        {
+                            File.Delete(oldPath);
+                        }
+                    }
+                    sheet.AttachmentStoredPath = storedPath;
+                    sheet.AttachmentFileName = originalName;
+                }
+
+                sheet.Category = _category;
+                sheet.DescriptionHtml = descriptionHtml;
+
+                // Only rebuild the workflow while every step is still pending. Once
+                // approvals are underway (reviews to resolve), the steps are locked
+                // and we update content only.
+                if (allPending)
+                {
+                    sheet.ApprovalSteps.Clear();
+                    for (int i = 0; i < _rows.Count; i++)
+                    {
+                        var isLast = i == _rows.Count - 1;
+                        sheet.ApprovalSteps.Add(new ApprovalStep
+                        {
+                            StepIndex = i + 1,
+                            // Enforce: the last row is always Approve.
+                            Action = isLast ? ApprovalAction.Approve : _rows[i].Action,
+                            ApproverEmail = _rows[i].ApproverEmail
+                        });
+                    }
+                }
+
+                await DbContext.SaveChangesAsync();
+                sheetToken = sheet.Token;
+                link = NavigationManager.ToAbsoluteUri($"dashboard/sheet/{sheetToken}").AbsoluteUri;
+
+                if (allPending)
+                {
+                    foreach (var email in _rows.Select(r => r.ApproverEmail).Distinct(StringComparer.OrdinalIgnoreCase))
+                    {
+                        await EmailSender.SendSheetNotificationAsync(
+                            email,
+                            "A minute sheet was updated",
+                            $"{createdBy} updated a minute sheet that needs your review or approval.",
+                            link);
+                    }
+                }
+
+                NavigationManager.NavigateTo($"dashboard/sheet/{sheetToken}");
+            }
+            else
+            {
+                var sheet = new MinuteSheet
+                {
+                    Category = _category,
+                    DescriptionHtml = descriptionHtml,
+                    AttachmentFileName = originalName,
+                    AttachmentStoredPath = storedPath,
+                    CreatedByUserId = user.Id,
+                    CreatedAt = DateTime.UtcNow,
+                    Status = "Pending"
+                };
+
+                for (int i = 0; i < _rows.Count; i++)
+                {
+                    var isLast = i == _rows.Count - 1;
+                    sheet.ApprovalSteps.Add(new ApprovalStep
+                    {
+                        StepIndex = i + 1,
+                        // Enforce: the last row is always Approve.
+                        Action = isLast ? ApprovalAction.Approve : _rows[i].Action,
+                        ApproverEmail = _rows[i].ApproverEmail
+                    });
+                }
+
+                DbContext.MinuteSheets.Add(sheet);
+                await DbContext.SaveChangesAsync();
+                sheetToken = sheet.Token;
+
+                // Email the unique sheet link to each distinct approver.
+                link = NavigationManager.ToAbsoluteUri($"dashboard/sheet/{sheetToken}").AbsoluteUri;
+                foreach (var email in _rows.Select(r => r.ApproverEmail).Distinct(StringComparer.OrdinalIgnoreCase))
+                {
+                    await EmailSender.SendSheetNotificationAsync(
+                        email,
+                        "A minute sheet needs your approval",
+                        $"{createdBy} submitted a minute sheet that needs your review or approval.",
+                        link);
+                }
+
+                NavigationManager.NavigateTo("dashboard/history");
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Something went wrong: {ex.Message}";
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    [CascadingParameter]
+    private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private static string LockedStatusName(ApprovalStepStatus s) => s switch
+    {
+        ApprovalStepStatus.Reviewed => "Reviewed",
+        ApprovalStepStatus.Approved => "Approved",
+        _ => "Pending"
+    };
+
+    private static string LockedStatusClass(ApprovalStepStatus s) => s switch
+    {
+        ApprovalStepStatus.Approved => "bg-success",
+        ApprovalStepStatus.Reviewed => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+
+    private static string DesignationName(Designation d)
+    {
+        var member = typeof(Designation).GetMember(d.ToString()).FirstOrDefault();
+        var attr = member?.GetCustomAttributes(typeof(DisplayAttribute), false).FirstOrDefault() as DisplayAttribute;
+        return attr?.Name ?? d.ToString();
+    }
+
+    private static string Initials(string? fullName, string? email)
+    {
+        var source = !string.IsNullOrWhiteSpace(fullName) ? fullName : email ?? "";
+        var parts = source.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            return "?";
+        }
+        if (parts.Length == 1)
+        {
+            var word = parts[0];
+            return (word.Length >= 2 ? word[..2] : word).ToUpperInvariant();
+        }
+        return (parts[0][..1] + parts[^1][..1]).ToUpperInvariant();
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // Drop the cached Quill instance so a later visit re-initialises cleanly.
+        // Best-effort: during teardown/navigation JS interop may be unavailable
+        // (JSDisconnectedException) or disallowed mid-render (InvalidOperationException).
+        try
+        {
+            await JS.InvokeVoidAsync("quillInterop.destroy", "editor");
+        }
+        catch (JSDisconnectedException)
+        {
+        }
+        catch (InvalidOperationException)
+        {
+        }
+    }
+}

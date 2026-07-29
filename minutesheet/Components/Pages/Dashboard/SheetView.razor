@@ -1,0 +1,533 @@
+@page "/dashboard/sheet/{Token:guid}"
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using minutesheet.Data
+@using minutesheet.Components.Account
+
+@attribute [Authorize]
+
+@inject IConfiguration Configuration
+@inject UserManager<ApplicationUser> UserManager
+@inject SmtpEmailSender EmailSender
+@inject NavigationManager NavigationManager
+@inject IWebHostEnvironment Env
+@inject IJSRuntime JS
+
+<PageTitle>Minute Sheet</PageTitle>
+
+@if (_loading)
+{
+    <h1 class="page-title">Minute Sheet</h1>
+    <div class="content-card"><p class="mb-0">Loading...</p></div>
+}
+else if (_sheet is null)
+{
+    <h1 class="page-title">Minute Sheet</h1>
+    <div class="content-card"><p class="text-muted mb-0">This minute sheet could not be found.</p></div>
+}
+else if (!_canView)
+{
+    <h1 class="page-title">Minute Sheet</h1>
+    <div class="content-card">
+        <div class="alert alert-danger mb-0">You don't have access to this minute sheet.</div>
+    </div>
+}
+else
+{
+    <a href="dashboard/history" class="back-link">&larr; Back to history</a>
+
+    <div class="content-card mb-4">
+        <div class="d-flex align-items-center gap-3 mb-3">
+            <div class="sheet-avatar">
+                @if (!string.IsNullOrEmpty(_sheet.CreatedByUser?.AvatarPath))
+                {
+                    <img src="@($"/{_sheet.CreatedByUser!.AvatarPath}")" alt="Profile picture" />
+                }
+                else
+                {
+                    @Initials(_sheet.CreatedByUser?.FullName, _sheet.CreatedByUser?.Email)
+                }
+            </div>
+            <div style="flex:1;min-width:0;">
+                <div class="creator-label">Prepared by</div>
+                <div class="creator-name">@(string.IsNullOrWhiteSpace(_sheet.CreatedByUser?.FullName) ? _sheet.CreatedByUser?.Email : _sheet.CreatedByUser!.FullName)</div>
+                <div class="creator-meta">@CreatorMeta()</div>
+            </div>
+            @if (_canEdit)
+            {
+                <a href="dashboard/sheet/@Token/edit" class="btn btn-outline-primary btn-sm">Edit</a>
+            }
+            @if (_isCreator)
+            {
+                <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="DeleteSheet">Delete</button>
+            }
+            <span class="badge @SheetStatusClass(_currentStatus)" style="font-size:13px;padding:6px 16px;">@_currentStatus</span>
+        </div>
+
+        <div class="d-flex flex-wrap" style="gap:28px;padding:18px 0;border-top:1px solid #f0f1f7;border-bottom:1px solid #f0f1f7;margin-bottom:18px;">
+            <div>
+                <div class="creator-label mb-1">Category</div>
+                <div style="font-weight:500;">@(_sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
+            </div>
+            <div>
+                <div class="creator-label mb-1">Submitted</div>
+                <div style="font-weight:500;">@_sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
+            </div>
+            <div>
+                <div class="creator-label mb-1">Approvals</div>
+                <div style="font-weight:500;">@ApprovalWorkflow.ApprovedCount(_sheet.ApprovalSteps) / @_sheet.ApprovalSteps.Count approved</div>
+            </div>
+        </div>
+
+        <div class="mb-3">
+            <div class="creator-label mb-1">Description</div>
+            <div class="description-body">@((MarkupString)_sheet.DescriptionHtml)</div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(_sheet.AttachmentStoredPath))
+        {
+            <div class="mb-1">
+                <div class="creator-label mb-1">Attachment</div>
+                <a href="/@_sheet.AttachmentStoredPath" target="_blank">@_sheet.AttachmentFileName</a>
+            </div>
+        }
+    </div>
+
+    <div class="content-card mb-4">
+        <div class="section-title mb-3">Approval workflow</div>
+        @if (!string.IsNullOrEmpty(_error))
+        {
+            <div class="alert alert-danger">@_error</div>
+        }
+
+        @{
+            var maxStep = _sheet.ApprovalSteps.Count == 0 ? 0 : _sheet.ApprovalSteps.Max(s => s.StepIndex);
+        }
+        <div class="timeline">
+            @foreach (var step in _sheet.ApprovalSteps.OrderBy(s => s.StepIndex))
+            {
+                var mineActionable = _myActionableSteps.Any(s => s.Id == step.Id);
+                var canResolve = _isCreator && step.Status == ApprovalStepStatus.Reviewed;
+                <div class="tl-step">
+                    <div class="tl-rail">
+                        <div class="tl-dot @DotClass(step.Status)">@step.StepIndex</div>
+                        @if (step.StepIndex != maxStep)
+                        {
+                            <div class="tl-line"></div>
+                        }
+                    </div>
+                    <div class="tl-body">
+                        <div class="d-flex align-items-center gap-2 flex-wrap">
+                            <span class="tl-approver">@step.ApproverEmail</span>
+                            <span class="expected-chip">@(step.Action == ApprovalAction.Approve ? "Approve" : "Review")</span>
+                            <span class="badge @StepStatusClass(step.Status)">@DisplayName(step.Status)</span>
+                        </div>
+                        <div style="font-size:12.5px;color:#9296ab;margin-top:4px;">
+                            @(step.ActedAt is null ? "Awaiting action" : $"Acted {step.ActedAt.Value.ToLocalTime():dd MMM yyyy, HH:mm}")
+                        </div>
+
+                        @if (mineActionable)
+                        {
+                            <div class="action-zone mt-2" @key="@($"a{step.Id}-{_epoch}")">
+                                <div class="fw-semibold mb-2">Your action</div>
+                                <textarea class="form-control mb-2" rows="3" placeholder="Add a comment..."
+                                          value="@GetDraft(step.Id)" @oninput="e => SetDraft(step.Id, e.Value?.ToString())"></textarea>
+                                <div class="d-flex gap-2">
+                                    <button class="btn btn-outline-primary" disabled="@_busy" @onclick="() => MarkReviewed(step.Id)">Review</button>
+                                    <button class="btn btn-success" disabled="@_busy" @onclick="() => Approve(step.Id)">Approve</button>
+                                </div>
+                                <div class="form-text">A review requires a comment; a comment is optional when approving.</div>
+                            </div>
+                        }
+
+                        @if (canResolve)
+                        {
+                            <div class="action-zone action-zone--review mt-2" @key="@($"r{step.Id}-{_epoch}")">
+                                <div class="fw-semibold mb-2">Resolve this review</div>
+                                <textarea class="form-control mb-2" rows="3" placeholder="Describe how you resolved this review..."
+                                          value="@GetResolveDraft(step.Id)" @oninput="e => SetResolveDraft(step.Id, e.Value?.ToString())"></textarea>
+                                <button class="btn btn-primary" disabled="@_busy" @onclick="() => Resolve(step.Id)">Resolve &amp; send back</button>
+                                <div class="form-text">Resolving sends this step back to Pending so the approver can review again or approve.</div>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
+
+    <div class="content-card">
+        <div class="section-title mb-3">Comments</div>
+        @if (_sheet.Comments.Count == 0)
+        {
+            <p class="text-muted mb-0">No comments yet.</p>
+        }
+        else
+        {
+            <ul class="comment-thread">
+                @foreach (var c in _sheet.Comments.OrderBy(c => c.CreatedAt))
+                {
+                    <li class="comment-item">
+                        <div class="comment-avatar">@Initials(c.AuthorName, null)</div>
+                        <div class="comment-bubble">
+                            <div class="comment-head">
+                                <span class="fw-semibold" style="font-size:13.5px;">@c.AuthorName</span>
+                                <span class="badge @CommentKindClass(c.Kind)" style="font-size:11px;">@DisplayName(c.Kind)</span>
+                                <span class="text-muted" style="font-size:12px;">@c.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</span>
+                            </div>
+                            <div class="comment-body">@c.Body</div>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+    </div>
+}
+
+@code {
+    [Parameter] public Guid Token { get; set; }
+
+    [CascadingParameter] private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private MinuteSheet? _sheet;
+    private ApplicationUser? _me;
+    private bool _loading = true;
+    private bool _canView;
+    private bool _isCreator;
+    private bool _canEdit;
+    private string? _error;
+    private bool _busy;
+
+    private List<ApprovalStep> _myActionableSteps = new();
+    private readonly Dictionary<int, string> _drafts = new();
+    private readonly Dictionary<int, string> _resolveDrafts = new();
+
+    private string _currentStatus = "Pending";
+    private int _epoch;
+
+    private DbContextOptions<ApplicationDbContext> _options = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlServer(Configuration.GetConnectionString("DefaultConnection"))
+            .Options;
+
+        var authState = await AuthState;
+        _me = await UserManager.GetUserAsync(authState.User);
+        await LoadAsync();
+        _loading = false;
+    }
+
+    private ApplicationDbContext NewDb() => new(_options);
+
+    private string GetDraft(int id) => _drafts.GetValueOrDefault(id, "");
+    private void SetDraft(int id, string? v) => _drafts[id] = v ?? "";
+    private string GetResolveDraft(int id) => _resolveDrafts.GetValueOrDefault(id, "");
+    private void SetResolveDraft(int id, string? v) => _resolveDrafts[id] = v ?? "";
+
+    private async Task LoadAsync()
+    {
+        await using var db = NewDb();
+        _sheet = await db.MinuteSheets
+            .AsNoTracking()
+            .Include(m => m.ApprovalSteps)
+            .Include(m => m.Comments)
+            .Include(m => m.CreatedByUser!).ThenInclude(u => u.Department)
+            .FirstOrDefaultAsync(m => m.Token == Token);
+
+        if (_sheet is null || _me is null)
+        {
+            return;
+        }
+
+        _isCreator = _sheet.CreatedByUserId == _me.Id;
+        // Full edit while all steps are pending; limited edit (description +
+        // attachment) once there are reviews to resolve.
+        _canEdit = _isCreator && (_sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending)
+                                  || _sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed));
+        var myEmail = _me.Email ?? "";
+        var isApprover = _sheet.ApprovalSteps.Any(s => string.Equals(s.ApproverEmail, myEmail, StringComparison.OrdinalIgnoreCase));
+        _canView = _isCreator || isApprover;
+
+        _currentStatus = ApprovalWorkflow.StatusFor(_sheet);
+        _myActionableSteps = _sheet.ApprovalSteps
+            .Where(s => string.Equals(s.ApproverEmail, myEmail, StringComparison.OrdinalIgnoreCase)
+                        && s.Status != ApprovalStepStatus.Approved)
+            .OrderBy(s => s.StepIndex)
+            .ToList();
+
+        // Bump the epoch so action zones are re-keyed and their textareas reset.
+        _epoch++;
+    }
+
+    private string MyName() =>
+        _me is null ? "" : (string.IsNullOrWhiteSpace(_me.FullName) ? _me.Email ?? "" : _me.FullName);
+
+    private async Task MarkReviewed(int stepId)
+    {
+        if (_me is null) return;
+        var comment = GetDraft(stepId).Trim();
+        if (comment.Length == 0)
+        {
+            _error = "Please add a comment explaining your review.";
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        string? creatorEmail;
+        await using (var db = NewDb())
+        {
+            var sheet = await db.MinuteSheets.Include(m => m.ApprovalSteps).Include(m => m.CreatedByUser)
+                .FirstOrDefaultAsync(m => m.Token == Token);
+            var step = sheet?.ApprovalSteps.FirstOrDefault(s => s.Id == stepId);
+            if (sheet is null || step is null) { _busy = false; return; }
+
+            step.Status = ApprovalStepStatus.Reviewed;
+            step.ActedAt = DateTime.UtcNow;
+            db.Comments.Add(new SheetComment
+            {
+                MinuteSheetId = sheet.Id,
+                ApprovalStepId = step.Id,
+                AuthorUserId = _me.Id,
+                AuthorName = MyName(),
+                Kind = CommentKind.Review,
+                Body = comment
+            });
+            sheet.Status = ApprovalWorkflow.StatusFor(sheet);
+            await db.SaveChangesAsync();
+            creatorEmail = sheet.CreatedByUser?.Email;
+        }
+
+        _drafts.Remove(stepId);
+        await LoadAsync();
+
+        if (!string.IsNullOrEmpty(creatorEmail))
+        {
+            await EmailSender.SendSheetNotificationAsync(
+                creatorEmail,
+                "A review was left on your minute sheet",
+                $"{MyName()} reviewed your minute sheet and left a comment to resolve.",
+                NavigationManager.Uri);
+        }
+        _busy = false;
+    }
+
+    private async Task Approve(int stepId)
+    {
+        if (_me is null) return;
+
+        _busy = true;
+        _error = null;
+        var comment = GetDraft(stepId).Trim();
+
+        bool fullyApproved;
+        string? creatorEmail;
+        await using (var db = NewDb())
+        {
+            var sheet = await db.MinuteSheets.Include(m => m.ApprovalSteps).Include(m => m.CreatedByUser)
+                .FirstOrDefaultAsync(m => m.Token == Token);
+            var step = sheet?.ApprovalSteps.FirstOrDefault(s => s.Id == stepId);
+            if (sheet is null || step is null) { _busy = false; return; }
+
+            step.Status = ApprovalStepStatus.Approved;
+            step.ActedAt = DateTime.UtcNow;
+            if (comment.Length > 0)
+            {
+                db.Comments.Add(new SheetComment
+                {
+                    MinuteSheetId = sheet.Id,
+                    ApprovalStepId = step.Id,
+                    AuthorUserId = _me.Id,
+                    AuthorName = MyName(),
+                    Kind = CommentKind.Approval,
+                    Body = comment
+                });
+            }
+            sheet.Status = ApprovalWorkflow.StatusFor(sheet);
+            await db.SaveChangesAsync();
+            fullyApproved = sheet.Status == "Approved";
+            creatorEmail = sheet.CreatedByUser?.Email;
+        }
+
+        _drafts.Remove(stepId);
+        await LoadAsync();
+
+        if (fullyApproved && !string.IsNullOrEmpty(creatorEmail))
+        {
+            await EmailSender.SendSheetNotificationAsync(
+                creatorEmail,
+                "Your minute sheet is fully approved",
+                "All approvers have approved your minute sheet.",
+                NavigationManager.Uri);
+        }
+        _busy = false;
+    }
+
+    private async Task Resolve(int stepId)
+    {
+        if (_me is null || !_isCreator) return;
+
+        var note = GetResolveDraft(stepId).Trim();
+        if (note.Length == 0)
+        {
+            _error = "Please describe how you resolved the review.";
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+
+        string? approverEmail;
+        await using (var db = NewDb())
+        {
+            var sheet = await db.MinuteSheets.Include(m => m.ApprovalSteps)
+                .FirstOrDefaultAsync(m => m.Token == Token);
+            var step = sheet?.ApprovalSteps.FirstOrDefault(s => s.Id == stepId);
+            if (sheet is null || step is null) { _busy = false; return; }
+
+            db.Comments.Add(new SheetComment
+            {
+                MinuteSheetId = sheet.Id,
+                ApprovalStepId = step.Id,
+                AuthorUserId = _me.Id,
+                AuthorName = MyName(),
+                Kind = CommentKind.Resolution,
+                Body = note
+            });
+            // Send the step back so the approver looks again.
+            step.Status = ApprovalStepStatus.Pending;
+            step.ActedAt = null;
+            approverEmail = step.ApproverEmail;
+            sheet.Status = ApprovalWorkflow.StatusFor(sheet);
+            await db.SaveChangesAsync();
+        }
+
+        _resolveDrafts.Remove(stepId);
+        await LoadAsync();
+
+        if (!string.IsNullOrEmpty(approverEmail))
+        {
+            await EmailSender.SendSheetNotificationAsync(
+                approverEmail,
+                "Your review was resolved",
+                $"{MyName()} resolved your review. Please take another look and review or approve.",
+                NavigationManager.Uri);
+        }
+        _busy = false;
+    }
+
+    private async Task DeleteSheet()
+    {
+        if (_sheet is null || !_isCreator) return;
+
+        var confirmed = await JS.InvokeAsync<bool>("confirm",
+            "Delete this minute sheet? This permanently removes it along with its approval steps and comments. This cannot be undone.");
+        if (!confirmed) return;
+
+        _busy = true;
+        _error = null;
+
+        string? attachmentPath;
+        await using (var db = NewDb())
+        {
+            var sheet = await db.MinuteSheets.FirstOrDefaultAsync(m => m.Token == Token);
+            if (sheet is null || sheet.CreatedByUserId != _me!.Id) { _busy = false; return; }
+
+            attachmentPath = sheet.AttachmentStoredPath;
+            db.MinuteSheets.Remove(sheet);
+            await db.SaveChangesAsync();
+        }
+
+        if (!string.IsNullOrEmpty(attachmentPath))
+        {
+            try
+            {
+                var fullPath = Path.Combine(Env.WebRootPath, attachmentPath);
+                if (File.Exists(fullPath)) File.Delete(fullPath);
+            }
+            catch (IOException) { /* best-effort cleanup */ }
+        }
+
+        NavigationManager.NavigateTo("dashboard/history");
+    }
+
+    private string CreatorMeta()
+    {
+        var u = _sheet?.CreatedByUser;
+        if (u is null) return "";
+        var parts = new List<string> { DesignationName(u.Designation) };
+        if (!string.IsNullOrEmpty(u.Department?.Name)) parts.Add(u.Department!.Name);
+        if (!string.IsNullOrEmpty(u.EmployeeNo)) parts.Add($"Emp #{u.EmployeeNo}");
+        return string.Join(" · ", parts);
+    }
+
+    private static string DotClass(ApprovalStepStatus s) => s switch
+    {
+        ApprovalStepStatus.Approved => "is-approved",
+        ApprovalStepStatus.Reviewed => "is-reviewed",
+        _ => ""
+    };
+
+    private static string DisplayName(ApprovalStepStatus s) => s switch
+    {
+        ApprovalStepStatus.Reviewed => "Reviewed",
+        ApprovalStepStatus.Approved => "Approved",
+        _ => "Pending"
+    };
+
+    private static string DisplayName(CommentKind k) => k switch
+    {
+        CommentKind.Review => "Review",
+        CommentKind.Approval => "Approval",
+        CommentKind.Resolution => "Resolution",
+        _ => k.ToString()
+    };
+
+    private static string SheetStatusClass(string status) =>
+        status == "Approved" ? "bg-success" : "bg-warning text-dark";
+
+    private static string StepStatusClass(ApprovalStepStatus s) => s switch
+    {
+        ApprovalStepStatus.Approved => "bg-success",
+        ApprovalStepStatus.Reviewed => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+
+    private static string CommentKindClass(CommentKind k) => k switch
+    {
+        CommentKind.Approval => "bg-success",
+        CommentKind.Resolution => "bg-info text-dark",
+        _ => "bg-warning text-dark"
+    };
+
+    private static string DesignationName(Designation d)
+    {
+        var member = typeof(Designation).GetMember(d.ToString()).FirstOrDefault();
+        var attr = member?.GetCustomAttributes(typeof(DisplayAttribute), false).FirstOrDefault() as DisplayAttribute;
+        return attr?.Name ?? d.ToString();
+    }
+
+    private static string Initials(string? fullName, string? email)
+    {
+        var source = !string.IsNullOrWhiteSpace(fullName) ? fullName : email ?? "";
+        var parts = source.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            return "?";
+        }
+        if (parts.Length == 1)
+        {
+            var word = parts[0];
+            return (word.Length >= 2 ? word[..2] : word).ToUpperInvariant();
+        }
+        return (parts[0][..1] + parts[^1][..1]).ToUpperInvariant();
+    }
+}

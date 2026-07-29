@@ -1,0 +1,128 @@
+@page "/"
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using minutesheet.Data
+
+@attribute [Authorize]
+
+@inject ApplicationDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Dashboard</PageTitle>
+
+<div style="margin-bottom:30px;">
+    <div class="dash-greeting-title">@Greeting, @_firstName</div>
+    <div class="dash-greeting-sub">@DateTime.Now.ToString("dddd, dd MMMM") · here's what's happening with your minute sheets.</div>
+</div>
+
+<div class="stat-grid">
+    <div class="stat-card">
+        <div class="stat-label">Pending your approval</div>
+        <div class="stat-value" style="color:#b26a00;">@_pendingApproval</div>
+        <div class="stat-sub">awaiting your action</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Reviews to resolve</div>
+        <div class="stat-value" style="color:#3548d4;">@_reviewsToResolve</div>
+        <div class="stat-sub">sent back to you</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Approved</div>
+        <div class="stat-value" style="color:#17875a;">@_approved</div>
+        <div class="stat-sub">of your sheets</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-label">Total sheets</div>
+        <div class="stat-value" style="color:#14173a;">@_total</div>
+        <div class="stat-sub">you've created</div>
+    </div>
+</div>
+
+<div class="section-title">Quick actions</div>
+<div class="qa-grid">
+    <a class="qa-card qa-dark" href="dashboard/create">
+        <div class="qa-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 5v14M5 12h14"></path></svg></div>
+        <div class="qa-title">Create a new sheet</div>
+        <div class="qa-desc">Start a minute sheet with description, attachment and approval workflow.</div>
+    </a>
+    <a class="qa-card" href="dashboard/history">
+        <div class="qa-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3548d4" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg></div>
+        <div class="qa-title">View history</div>
+        <div class="qa-desc">Browse minute sheets you've submitted and their approval progress.</div>
+    </a>
+    <a class="qa-card" href="dashboard/actions">
+        <div class="qa-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3548d4" stroke-width="2"><path d="M9 12l2 2 4-4"></path><circle cx="12" cy="12" r="9"></circle></svg></div>
+        <div class="qa-title">Actions</div>
+        <div class="qa-desc">Sheets waiting on your review, approval, or resolution.</div>
+    </a>
+</div>
+
+<div class="section-title">Recent activity</div>
+<div class="activity-card">
+    @if (_recent.Count == 0)
+    {
+        <div style="padding:22px;color:#9296ab;font-size:14px;">No minute sheets yet. Create your first one.</div>
+    }
+    else
+    {
+        @foreach (var sheet in _recent)
+        {
+            var status = ApprovalWorkflow.StatusFor(sheet);
+            <a class="activity-row" href="dashboard/sheet/@sheet.Token">
+                <div style="flex:1;min-width:0;">
+                    <div class="activity-title">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial") minute sheet</div>
+                    <div class="activity-meta">@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm") · @ApprovalWorkflow.ApprovedCount(sheet.ApprovalSteps) / @sheet.ApprovalSteps.Count approved</div>
+                </div>
+                <span class="badge @(status == "Approved" ? "bg-success" : "bg-warning")">@status</span>
+            </a>
+        }
+    }
+</div>
+
+@code {
+    private string _firstName = "there";
+    private int _pendingApproval;
+    private int _reviewsToResolve;
+    private int _approved;
+    private int _total;
+    private List<MinuteSheet> _recent = new();
+
+    private string Greeting => DateTime.Now.Hour switch
+    {
+        < 12 => "Good morning",
+        < 18 => "Good afternoon",
+        _ => "Good evening"
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(authState.User);
+        if (user is null)
+        {
+            return;
+        }
+
+        var name = string.IsNullOrWhiteSpace(user.FullName) ? (user.Email ?? "there") : user.FullName;
+        _firstName = name.Split(' ', StringSplitOptions.RemoveEmptyEntries).FirstOrDefault() ?? "there";
+        var email = user.Email ?? "";
+
+        _pendingApproval = await DbContext.ApprovalSteps
+            .CountAsync(s => s.ApproverEmail == email && s.Status != ApprovalStepStatus.Approved);
+
+        var mySheets = await DbContext.MinuteSheets
+            .Where(m => m.CreatedByUserId == user.Id)
+            .Include(m => m.ApprovalSteps)
+            .OrderByDescending(m => m.CreatedAt)
+            .ToListAsync();
+
+        _total = mySheets.Count;
+        _approved = mySheets.Count(m => ApprovalWorkflow.IsFullyApproved(m.ApprovalSteps));
+        _reviewsToResolve = mySheets.Count(m => m.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed));
+        _recent = mySheets.Take(5).ToList();
+    }
+}

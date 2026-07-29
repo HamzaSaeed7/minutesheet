@@ -1,0 +1,211 @@
+@page "/Account/Register"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using minutesheet.Components.Account
+@using minutesheet.Data
+
+@inject UserManager<ApplicationUser> UserManager
+@inject IUserStore<ApplicationUser> UserStore
+@inject ApplicationDbContext DbContext
+@inject SmtpEmailSender EmailSender
+@inject ILogger<Register> Logger
+@inject NavigationManager NavigationManager
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Sign up</PageTitle>
+
+<h1 class="auth-title">Create your account</h1>
+<p class="auth-subtitle">Fill in your details to get started.</p>
+
+<StatusMessage Message="@Message" />
+
+<EditForm Model="Input" asp-route-returnUrl="@ReturnUrl" method="post" OnValidSubmit="RegisterUser" FormName="register">
+    <DataAnnotationsValidator />
+    <ValidationSummary class="text-danger" role="alert" />
+
+    <div class="form-floating mb-3">
+        <InputText @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
+        <label>Email</label>
+        <ValidationMessage For="() => Input.Email" class="text-danger" />
+    </div>
+
+    <div class="form-floating mb-3">
+        <InputText type="password" @bind-Value="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
+        <label>Password</label>
+        <ValidationMessage For="() => Input.Password" class="text-danger" />
+    </div>
+
+    <div class="form-floating mb-3">
+        <InputText @bind-Value="Input.FullName" class="form-control" autocomplete="name" aria-required="true" placeholder="Full name" />
+        <label>Name</label>
+        <ValidationMessage For="() => Input.FullName" class="text-danger" />
+    </div>
+
+    <div class="form-floating mb-3">
+        <InputText @bind-Value="Input.EmployeeNo" class="form-control" aria-required="true" placeholder="Employee number" />
+        <label>Employee No.</label>
+        <ValidationMessage For="() => Input.EmployeeNo" class="text-danger" />
+    </div>
+
+    <div class="form-floating mb-3">
+        <InputSelect @bind-Value="Input.Designation" class="form-select">
+            @foreach (var d in Enum.GetValues<Designation>())
+            {
+                <option value="@d">@DisplayName(d)</option>
+            }
+        </InputSelect>
+        <label>Designation</label>
+        <ValidationMessage For="() => Input.Designation" class="text-danger" />
+    </div>
+
+    <div class="form-floating mb-3">
+        <InputSelect @bind-Value="Input.DepartmentId" class="form-select">
+            <option value="">-- Select department --</option>
+            @foreach (var dept in _departments)
+            {
+                <option value="@dept.Id">@dept.Name</option>
+            }
+        </InputSelect>
+        <label>Department</label>
+        <ValidationMessage For="() => Input.DepartmentId" class="text-danger" />
+    </div>
+
+    <button type="submit" class="w-100 btn btn-lg btn-primary">Sign up</button>
+</EditForm>
+
+<p class="auth-footer mt-3">
+    Already have an account? <a href="Account/Login">Log in</a>
+</p>
+
+@code {
+    private IEnumerable<IdentityError>? identityErrors;
+    private List<Department> _departments = new();
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    private string? Message => identityErrors is null ? null : $"Error: {string.Join(", ", identityErrors.Select(error => error.Description))}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        _departments = await DbContext.Departments.OrderBy(d => d.Name).ToListAsync();
+    }
+
+    private static string DisplayName(Designation d)
+    {
+        var member = typeof(Designation).GetMember(d.ToString()).FirstOrDefault();
+        var attr = member?.GetCustomAttributes(typeof(DisplayAttribute), false).FirstOrDefault() as DisplayAttribute;
+        return attr?.Name ?? d.ToString();
+    }
+
+    public async Task RegisterUser(EditContext editContext)
+    {
+        var user = CreateUser();
+        user.FullName = Input.FullName;
+        user.EmployeeNo = Input.EmployeeNo;
+        user.Designation = Input.Designation;
+        user.DepartmentId = Input.DepartmentId;
+
+        await UserStore.SetUserNameAsync(user, Input.Email, CancellationToken.None);
+        var emailStore = GetEmailStore();
+        await emailStore.SetEmailAsync(user, Input.Email, CancellationToken.None);
+        var result = await UserManager.CreateAsync(user, Input.Password);
+
+        if (!result.Succeeded)
+        {
+            identityErrors = result.Errors;
+            return;
+        }
+
+        Logger.LogInformation("User created a new account with password.");
+
+        // Increment the department's running employee count.
+        if (Input.DepartmentId is int deptId)
+        {
+            var dept = await DbContext.Departments.FirstOrDefaultAsync(d => d.Id == deptId);
+            if (dept is not null)
+            {
+                dept.EmployeeCount += 1;
+                await DbContext.SaveChangesAsync();
+            }
+        }
+
+        // Generate a 6-digit OTP and email it, then send the user to the verification page.
+        var code = await UserManager.GenerateUserTokenAsync(user, TokenOptions.DefaultEmailProvider, "email-verification");
+        var sent = await EmailSender.SendOtpAsync(Input.Email, code);
+
+        var verifyUri = NavigationManager.GetUriWithQueryParameters(
+            NavigationManager.ToAbsoluteUri("Account/VerifyOtp").AbsoluteUri,
+            new Dictionary<string, object?> { ["email"] = Input.Email });
+
+        if (sent)
+        {
+            RedirectManager.RedirectTo(verifyUri);
+        }
+        else
+        {
+            RedirectManager.RedirectToWithStatus(verifyUri,
+                "Error: We couldn't send the verification email. Use \"Resend code\" on the next page.", HttpContext);
+        }
+    }
+
+    private ApplicationUser CreateUser()
+    {
+        try
+        {
+            return Activator.CreateInstance<ApplicationUser>();
+        }
+        catch
+        {
+            throw new InvalidOperationException($"Can't create an instance of '{nameof(ApplicationUser)}'. " +
+                $"Ensure that '{nameof(ApplicationUser)}' is not an abstract class and has a parameterless constructor.");
+        }
+    }
+
+    private IUserEmailStore<ApplicationUser> GetEmailStore()
+    {
+        if (!UserManager.SupportsUserEmail)
+        {
+            throw new NotSupportedException("The default UI requires a user store with email support.");
+        }
+        return (IUserEmailStore<ApplicationUser>)UserStore;
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [EmailAddress]
+        [Display(Name = "Email")]
+        public string Email { get; set; } = "";
+
+        [Required]
+        [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
+        [DataType(DataType.Password)]
+        [Display(Name = "Password")]
+        public string Password { get; set; } = "";
+
+        [Required]
+        [Display(Name = "Name")]
+        public string FullName { get; set; } = "";
+
+        [Required]
+        [Display(Name = "Employee No.")]
+        public string EmployeeNo { get; set; } = "";
+
+        [Required]
+        [Display(Name = "Designation")]
+        public Designation Designation { get; set; } = Designation.Executive;
+
+        [Required(ErrorMessage = "Please select a department.")]
+        [Display(Name = "Department")]
+        public int? DepartmentId { get; set; }
+    }
+}

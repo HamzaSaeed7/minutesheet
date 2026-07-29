@@ -1,0 +1,126 @@
+@page "/dashboard/actions"
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using minutesheet.Data
+
+@attribute [Authorize]
+
+@inject ApplicationDbContext DbContext
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Actions</PageTitle>
+
+<h1 class="page-title">Actions</h1>
+
+@if (_loading)
+{
+    <div class="content-card"><p class="mb-0">Loading...</p></div>
+}
+else
+{
+    <div class="act-section">Pending your approval</div>
+    <div class="act-card" style="margin-bottom:28px;">
+        @if (_pending.Count == 0)
+        {
+            <div class="act-empty">Nothing waiting on you right now.</div>
+        }
+        else
+        {
+            <div class="act-head" style="grid-template-columns:1.3fr 1.3fr 1fr 1fr 90px;">
+                <div>Date</div><div>From</div><div>Category</div><div>Your status</div><div></div>
+            </div>
+            @foreach (var step in _pending)
+            {
+                var sheet = step.MinuteSheet!;
+                <div class="act-row" style="grid-template-columns:1.3fr 1.3fr 1fr 1fr 90px;">
+                    <div>@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
+                    <div style="color:#565b78;">@CreatorName(sheet)</div>
+                    <div style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
+                    <div><span class="badge @StepStatusClass(step.Status)">@DisplayName(step.Status)</span></div>
+                    <div><a class="btn btn-sm btn-primary" href="dashboard/sheet/@sheet.Token">Open</a></div>
+                </div>
+            }
+        }
+    </div>
+
+    <div class="act-section">Reviews to resolve</div>
+    <div class="act-card">
+        @if (_toResolve.Count == 0)
+        {
+            <div class="act-empty">No reviews awaiting your resolution.</div>
+        }
+        else
+        {
+            <div class="act-head" style="grid-template-columns:1.5fr 1fr 1fr 90px;">
+                <div>Date</div><div>Category</div><div>Reviews to resolve</div><div></div>
+            </div>
+            @foreach (var sheet in _toResolve)
+            {
+                var count = sheet.ApprovalSteps.Count(s => s.Status == ApprovalStepStatus.Reviewed);
+                <div class="act-row" style="grid-template-columns:1.5fr 1fr 1fr 90px;">
+                    <div>@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
+                    <div style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
+                    <div><span class="badge bg-warning">@count</span></div>
+                    <div><a class="btn btn-sm btn-primary" href="dashboard/sheet/@sheet.Token">Open</a></div>
+                </div>
+            }
+        }
+    </div>
+}
+
+@code {
+    private bool _loading = true;
+    private List<ApprovalStep> _pending = new();
+    private List<MinuteSheet> _toResolve = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = await UserManager.GetUserAsync(authState.User);
+        if (user is null)
+        {
+            _loading = false;
+            return;
+        }
+
+        var myEmail = user.Email ?? "";
+
+        _pending = await DbContext.ApprovalSteps
+            .Where(s => s.ApproverEmail == myEmail && s.Status != ApprovalStepStatus.Approved)
+            .Include(s => s.MinuteSheet!).ThenInclude(m => m.CreatedByUser)
+            .OrderByDescending(s => s.MinuteSheet!.CreatedAt)
+            .ToListAsync();
+
+        _toResolve = await DbContext.MinuteSheets
+            .Where(m => m.CreatedByUserId == user.Id
+                        && m.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed))
+            .Include(m => m.ApprovalSteps)
+            .OrderByDescending(m => m.CreatedAt)
+            .ToListAsync();
+
+        _loading = false;
+    }
+
+    private static string CreatorName(MinuteSheet sheet) =>
+        sheet.CreatedByUser is null
+            ? "—"
+            : (string.IsNullOrWhiteSpace(sheet.CreatedByUser.FullName) ? sheet.CreatedByUser.Email ?? "—" : sheet.CreatedByUser.FullName);
+
+    private static string DisplayName(ApprovalStepStatus s) => s switch
+    {
+        ApprovalStepStatus.Reviewed => "Reviewed",
+        ApprovalStepStatus.Approved => "Approved",
+        _ => "Pending"
+    };
+
+    private static string StepStatusClass(ApprovalStepStatus s) => s switch
+    {
+        ApprovalStepStatus.Approved => "bg-success",
+        ApprovalStepStatus.Reviewed => "bg-warning text-dark",
+        _ => "bg-secondary"
+    };
+}

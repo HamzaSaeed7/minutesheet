@@ -1,0 +1,159 @@
+@implements IDisposable
+
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using minutesheet.Data
+
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject UserManager<ApplicationUser> UserManager
+@inject IConfiguration Configuration
+
+<div class="sb">
+    <div class="sb-brand">
+        <div class="sb-logo">MS</div>
+        <div class="sb-title">Minute Sheet</div>
+    </div>
+
+    <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+
+    <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+        <nav class="sb-nav">
+            <NavLink class="sb-link" href="" Match="NavLinkMatch.All">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1.5"></rect><rect x="13" y="3" width="8" height="8" rx="1.5"></rect><rect x="3" y="13" width="8" height="8" rx="1.5"></rect><rect x="13" y="13" width="8" height="8" rx="1.5"></rect></svg>
+                <span>Dashboard</span>
+            </NavLink>
+            <NavLink class="sb-link" href="dashboard/create">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"></rect><path d="M12 8v8M8 12h8"></path></svg>
+                <span>Create New Sheet</span>
+            </NavLink>
+            <NavLink class="sb-link" href="dashboard/history">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg>
+                <span>History</span>
+            </NavLink>
+            <NavLink class="sb-link" href="dashboard/actions">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"></path><circle cx="12" cy="12" r="9"></circle></svg>
+                <span>Actions</span>
+                @if (_pendingCount > 0)
+                {
+                    <span class="sb-badge">@_pendingCount</span>
+                }
+            </NavLink>
+        </nav>
+
+        <div class="sb-bottom">
+            <NavLink class="sb-link" href="settings">
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.63 15a1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.63a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1.04H21a2 2 0 0 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15z"></path></svg>
+                <span>Settings</span>
+            </NavLink>
+
+            <AuthorizeView>
+                <Authorized>
+                    <div class="sb-user">
+                        <div class="sb-avatar">
+                            @if (!string.IsNullOrEmpty(_avatarPath))
+                            {
+                                <img src="/@_avatarPath" alt="Profile" />
+                            }
+                            else
+                            {
+                                @_initials
+                            }
+                        </div>
+                        <div class="sb-user-info">
+                            <div class="sb-user-name">@_name</div>
+                            <div class="sb-user-desig">@_designation</div>
+                        </div>
+                    </div>
+                    <form action="Account/Logout" method="post" class="sb-logout-form">
+                        <AntiforgeryToken />
+                        <input type="hidden" name="ReturnUrl" value="@currentUrl" />
+                        <button type="submit" class="sb-logout">
+                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>
+                            <span>Logout</span>
+                        </button>
+                    </form>
+                </Authorized>
+                <NotAuthorized>
+                    <NavLink class="sb-link" href="Account/Login">
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"></path></svg>
+                        <span>Login</span>
+                    </NavLink>
+                </NotAuthorized>
+            </AuthorizeView>
+        </div>
+    </div>
+</div>
+
+@code {
+    private string? currentUrl;
+    private string _name = "";
+    private string _designation = "";
+    private string _initials = "?";
+    private string? _avatarPath;
+    private int _pendingCount;
+
+    protected override async Task OnInitializedAsync()
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        NavigationManager.LocationChanged += OnLocationChanged;
+
+        // GetUserId only reads the claim (no DB). Use a private context for the
+        // queries so we never share the request-scoped DbContext with the page,
+        // which would trigger EF's "second operation on this context" error.
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var userId = UserManager.GetUserId(authState.User);
+        if (userId is null)
+        {
+            return;
+        }
+
+        var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+            .UseSqlServer(Configuration.GetConnectionString("DefaultConnection"))
+            .Options;
+        await using var db = new ApplicationDbContext(options);
+
+        var user = await db.Users.FirstOrDefaultAsync(u => u.Id == userId);
+        if (user is not null)
+        {
+            _name = string.IsNullOrWhiteSpace(user.FullName) ? (user.Email ?? "") : user.FullName;
+            _designation = DesignationName(user.Designation);
+            _avatarPath = user.AvatarPath;
+            _initials = Initials(user.FullName, user.Email);
+
+            var email = user.Email ?? "";
+            _pendingCount = await db.ApprovalSteps
+                .CountAsync(s => s.ApproverEmail == email && s.Status != ApprovalStepStatus.Approved);
+        }
+    }
+
+    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
+        StateHasChanged();
+    }
+
+    public void Dispose() => NavigationManager.LocationChanged -= OnLocationChanged;
+
+    private static string DesignationName(Designation d)
+    {
+        var member = typeof(Designation).GetMember(d.ToString()).FirstOrDefault();
+        var attr = member?.GetCustomAttributes(typeof(System.ComponentModel.DataAnnotations.DisplayAttribute), false)
+            .FirstOrDefault() as System.ComponentModel.DataAnnotations.DisplayAttribute;
+        return attr?.Name ?? d.ToString();
+    }
+
+    private static string Initials(string? fullName, string? email)
+    {
+        var source = !string.IsNullOrWhiteSpace(fullName) ? fullName : email ?? "";
+        var parts = source.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return "?";
+        if (parts.Length == 1)
+        {
+            var w = parts[0];
+            return (w.Length >= 2 ? w[..2] : w).ToUpperInvariant();
+        }
+        return (parts[0][..1] + parts[^1][..1]).ToUpperInvariant();
+    }
+}

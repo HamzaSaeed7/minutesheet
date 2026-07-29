@@ -1,0 +1,396 @@
+@page "/settings"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using minutesheet.Components.Account
+@using minutesheet.Components.Account.Shared
+@using minutesheet.Data
+
+@attribute [Authorize]
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject ApplicationDbContext DbContext
+@inject IdentityUserAccessor UserAccessor
+@inject IdentityRedirectManager RedirectManager
+@inject IWebHostEnvironment Env
+@inject ILogger<Settings> Logger
+
+<PageTitle>Settings</PageTitle>
+
+<h1 class="page-title">Settings</h1>
+
+<StatusMessage Message="@_message" />
+
+<div class="content-card settings-card narrow" style="margin-bottom:20px;">
+    <div style="font-size:16px;font-weight:600;color:#14173a;margin-bottom:2px;">Profile information</div>
+    <div style="font-size:13px;color:#9296ab;margin-bottom:22px;">Update the details associated with your account.</div>
+
+    <EditForm Model="Input" FormName="profile" OnValidSubmit="OnSaveProfileAsync" method="post"
+              enctype="multipart/form-data">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="text-danger" role="alert" />
+
+        <div class="d-flex align-items-center gap-3" style="margin-bottom:22px;">
+            <div class="avatar-preview">
+                @if (!string.IsNullOrEmpty(_user?.AvatarPath))
+                {
+                    <img src="@($"/{_user.AvatarPath}?v={_avatarVersion}")" alt="Profile picture" />
+                }
+                else
+                {
+                    <span class="avatar-initials">@Initials(_user?.FullName, _email)</span>
+                }
+            </div>
+            <div>
+                <div style="font-size:13.5px;font-weight:600;color:#1a1d2e;margin-bottom:6px;">Profile picture</div>
+                <label class="upload-btn">
+                    Upload new photo
+                    <input type="file" name="Avatar" accept=".png,.jpg,.jpeg,.webp,.gif" hidden />
+                </label>
+                <div class="form-text" style="font-size:12px;">PNG, JPG, WEBP or GIF, up to 5 MB.</div>
+                @if (!string.IsNullOrEmpty(_avatarError))
+                {
+                    <div class="text-danger small mt-1">@_avatarError</div>
+                }
+            </div>
+        </div>
+
+        <div class="settings-grid">
+            <div class="col-full">
+                <div class="field-label">Email</div>
+                <input type="text" value="@_email" class="form-control" disabled />
+                <div class="form-text">Email changes are managed from the account area.</div>
+            </div>
+            <div>
+                <div class="field-label">Full name</div>
+                <InputText @bind-Value="Input.FullName" class="form-control" autocomplete="name" placeholder="Full name" />
+                <ValidationMessage For="() => Input.FullName" class="text-danger" />
+            </div>
+            <div>
+                <div class="field-label">Employee No.</div>
+                <InputText @bind-Value="Input.EmployeeNo" class="form-control" placeholder="Employee number" />
+                <ValidationMessage For="() => Input.EmployeeNo" class="text-danger" />
+            </div>
+            <div>
+                <div class="field-label">Designation</div>
+                <InputSelect @bind-Value="Input.Designation" class="form-select">
+                    @foreach (var d in Enum.GetValues<Designation>())
+                    {
+                        <option value="@d">@DisplayName(d)</option>
+                    }
+                </InputSelect>
+                <ValidationMessage For="() => Input.Designation" class="text-danger" />
+            </div>
+            <div>
+                <div class="field-label">Department</div>
+                <InputSelect @bind-Value="Input.DepartmentId" class="form-select">
+                    <option value="">-- Select department --</option>
+                    @foreach (var dept in _departments)
+                    {
+                        <option value="@dept.Id">@dept.Name</option>
+                    }
+                </InputSelect>
+                <ValidationMessage For="() => Input.DepartmentId" class="text-danger" />
+            </div>
+            <div class="col-full">
+                <div class="field-label">Phone number <span class="text-muted fw-normal">(optional)</span></div>
+                <InputText @bind-Value="Input.PhoneNumber" class="form-control" autocomplete="tel" placeholder="Phone number" />
+                <ValidationMessage For="() => Input.PhoneNumber" class="text-danger" />
+            </div>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="border-radius:10px;padding:12px 26px;margin-top:22px;">Save changes</button>
+    </EditForm>
+</div>
+
+<div class="content-card settings-card narrow" style="margin-bottom:20px;">
+    <div class="d-flex align-items-start justify-content-between" style="gap:16px;">
+        <div>
+            <div style="font-size:16px;font-weight:600;color:#14173a;margin-bottom:2px;">Two-factor authentication</div>
+            <div style="font-size:13px;color:#9296ab;">Add an extra layer of security using an authenticator app.</div>
+        </div>
+        <span class="badge @(_is2faEnabled ? "bg-success" : "bg-warning")">@(_is2faEnabled ? "Enabled" : "Not enabled")</span>
+    </div>
+
+    <div style="margin-top:18px;">
+        @if (_is2faEnabled)
+        {
+            <div style="font-size:13.5px;color:#565b78;margin-bottom:14px;">
+                Two-factor authentication is on. You have <strong>@_recoveryCodesLeft</strong> recovery code@(_recoveryCodesLeft == 1 ? "" : "s") remaining.
+            </div>
+            <a href="settings/two-factor" class="btn btn-outline-primary">Manage 2FA</a>
+        }
+        else
+        {
+            <div style="font-size:13.5px;color:#565b78;margin-bottom:14px;">
+                Require a one-time code from your authenticator app (Google Authenticator, Microsoft Authenticator, etc.) each time you sign in.
+            </div>
+            <a href="settings/two-factor" class="btn btn-primary" style="border-radius:10px;padding:12px 22px;">Set up authenticator app</a>
+        }
+    </div>
+</div>
+
+<div class="content-card settings-card narrow danger">
+    <div style="font-size:16px;font-weight:600;color:#d33636;margin-bottom:2px;">Delete account</div>
+    <div class="alert alert-danger" role="alert" style="margin:14px 0;">
+        Deleting your account permanently removes it and all associated profile data.
+        <strong>This cannot be undone.</strong>
+    </div>
+
+    <EditForm Model="Delete" FormName="delete-account" OnValidSubmit="OnDeleteAccountAsync" method="post">
+        <DataAnnotationsValidator />
+        <ValidationSummary class="text-danger" role="alert" />
+
+        @if (_requirePassword)
+        {
+            <div class="mb-3">
+                <div class="field-label">Confirm your password</div>
+                <InputText type="password" @bind-Value="Delete.Password" class="form-control"
+                           autocomplete="current-password" placeholder="Current password" />
+                <ValidationMessage For="() => Delete.Password" class="text-danger" />
+            </div>
+        }
+
+        <button type="submit" class="btn btn-danger" style="border-radius:10px;padding:12px 24px;">Delete my account</button>
+    </EditForm>
+</div>
+
+@code {
+    private ApplicationUser _user = default!;
+    private string? _email;
+    private int? _originalDepartmentId;
+    private bool _requirePassword;
+    private string? _message;
+    private string? _avatarError;
+    private string _avatarVersion = "1";
+    private List<Department> _departments = new();
+    private bool _is2faEnabled;
+    private int _recoveryCodesLeft;
+
+    private const long MaxAvatarBytes = 5 * 1024 * 1024;
+    private static readonly string[] AllowedAvatarExtensions = { ".png", ".jpg", ".jpeg", ".webp", ".gif" };
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    // Two forms share this page. During a POST, Blazor SSR sets the model of the
+    // form that was NOT submitted to null, so null-coalescing setters keep both
+    // models non-null and prevent "EditForm requires a Model" render errors.
+    private ProfileModel _input = new();
+    [SupplyParameterFromForm(FormName = "profile")]
+    private ProfileModel Input { get => _input; set => _input = value ?? new(); }
+
+    private DeleteModel _delete = new();
+    [SupplyParameterFromForm(FormName = "delete-account")]
+    private DeleteModel Delete { get => _delete; set => _delete = value ?? new(); }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _user = await UserAccessor.GetRequiredUserAsync(HttpContext);
+        _email = _user.Email;
+        _originalDepartmentId = _user.DepartmentId;
+        _requirePassword = await UserManager.HasPasswordAsync(_user);
+        _departments = await DbContext.Departments.OrderBy(d => d.Name).ToListAsync();
+        _avatarVersion = DateTime.UtcNow.Ticks.ToString();
+        _is2faEnabled = await UserManager.GetTwoFactorEnabledAsync(_user);
+        _recoveryCodesLeft = await UserManager.CountRecoveryCodesAsync(_user);
+
+        // Only seed the form on the initial GET; on a POST keep the submitted values.
+        if (HttpMethods.IsGet(HttpContext.Request.Method))
+        {
+            Input.FullName = _user.FullName;
+            Input.EmployeeNo = _user.EmployeeNo;
+            Input.Designation = _user.Designation;
+            Input.DepartmentId = _user.DepartmentId;
+            Input.PhoneNumber = _user.PhoneNumber;
+        }
+    }
+
+    private async Task OnSaveProfileAsync()
+    {
+        _user.FullName = Input.FullName;
+        _user.EmployeeNo = Input.EmployeeNo;
+        _user.Designation = Input.Designation;
+        _user.DepartmentId = Input.DepartmentId;
+        _user.PhoneNumber = Input.PhoneNumber;
+
+        // Apply a newly uploaded profile picture (if any) before persisting.
+        if (!await TrySaveAvatarAsync())
+        {
+            return; // _avatarError is shown; nothing is saved.
+        }
+
+        var result = await UserManager.UpdateAsync(_user);
+        if (!result.Succeeded)
+        {
+            _message = $"Error: {string.Join(", ", result.Errors.Select(e => e.Description))}";
+            return;
+        }
+
+        // Keep each department's running employee count in sync when the user moves.
+        if (_originalDepartmentId != Input.DepartmentId)
+        {
+            await AdjustDepartmentCountAsync(_originalDepartmentId, delta: -1);
+            await AdjustDepartmentCountAsync(Input.DepartmentId, delta: +1);
+        }
+
+        await SignInManager.RefreshSignInAsync(_user);
+        Logger.LogInformation("User {Email} updated their profile.", _email);
+        RedirectManager.RedirectToCurrentPageWithStatus("Your settings have been saved.", HttpContext);
+    }
+
+    private async Task OnDeleteAccountAsync()
+    {
+        if (_requirePassword && !await UserManager.CheckPasswordAsync(_user, Delete.Password))
+        {
+            _message = "Error: Incorrect password.";
+            return;
+        }
+
+        var departmentId = _user.DepartmentId;
+        var avatarPath = _user.AvatarPath;
+        var userId = await UserManager.GetUserIdAsync(_user);
+
+        var result = await UserManager.DeleteAsync(_user);
+        if (!result.Succeeded)
+        {
+            _message = $"Error: {string.Join(", ", result.Errors.Select(e => e.Description))}";
+            return;
+        }
+
+        DeleteAvatarFile(avatarPath);
+        await AdjustDepartmentCountAsync(departmentId, delta: -1);
+        await SignInManager.SignOutAsync();
+
+        Logger.LogInformation("User with ID '{UserId}' deleted their account.", userId);
+        RedirectManager.RedirectTo("Account/Login");
+    }
+
+    private async Task AdjustDepartmentCountAsync(int? departmentId, int delta)
+    {
+        if (departmentId is not int id)
+        {
+            return;
+        }
+
+        var dept = await DbContext.Departments.FirstOrDefaultAsync(d => d.Id == id);
+        if (dept is not null)
+        {
+            dept.EmployeeCount = Math.Max(0, dept.EmployeeCount + delta);
+            await DbContext.SaveChangesAsync();
+        }
+    }
+
+    private async Task<bool> TrySaveAvatarAsync()
+    {
+        var file = HttpContext.Request.Form.Files["Avatar"];
+        if (file is null || file.Length == 0)
+        {
+            return true; // No new file selected — leave the existing picture as-is.
+        }
+
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        if (!AllowedAvatarExtensions.Contains(ext))
+        {
+            _avatarError = "Unsupported image type. Use PNG, JPG, WEBP or GIF.";
+            return false;
+        }
+        if (file.Length > MaxAvatarBytes)
+        {
+            _avatarError = "Image exceeds the 5 MB limit.";
+            return false;
+        }
+
+        var dir = Path.Combine(Env.WebRootPath, "uploads", "avatars");
+        Directory.CreateDirectory(dir);
+        var storedName = $"{Guid.NewGuid():N}{ext}";
+        var fullPath = Path.Combine(dir, storedName);
+        await using (var fs = new FileStream(fullPath, FileMode.Create))
+        {
+            await file.CopyToAsync(fs);
+        }
+
+        // Remove the previous picture so old files don't accumulate.
+        DeleteAvatarFile(_user.AvatarPath);
+        _user.AvatarPath = $"uploads/avatars/{storedName}";
+        return true;
+    }
+
+    private void DeleteAvatarFile(string? avatarPath)
+    {
+        if (string.IsNullOrEmpty(avatarPath))
+        {
+            return;
+        }
+
+        try
+        {
+            var full = Path.Combine(Env.WebRootPath, avatarPath.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(full))
+            {
+                File.Delete(full);
+            }
+        }
+        catch (IOException)
+        {
+            // Best-effort cleanup; a leftover file is not worth failing the request.
+        }
+    }
+
+    private static string Initials(string? fullName, string? email)
+    {
+        var source = !string.IsNullOrWhiteSpace(fullName) ? fullName : email ?? "";
+        var parts = source.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0)
+        {
+            return "?";
+        }
+        if (parts.Length == 1)
+        {
+            var word = parts[0];
+            return (word.Length >= 2 ? word[..2] : word).ToUpperInvariant();
+        }
+        return (parts[0][..1] + parts[^1][..1]).ToUpperInvariant();
+    }
+
+    private static string DisplayName(Designation d)
+    {
+        var member = typeof(Designation).GetMember(d.ToString()).FirstOrDefault();
+        var attr = member?.GetCustomAttributes(typeof(DisplayAttribute), false).FirstOrDefault() as DisplayAttribute;
+        return attr?.Name ?? d.ToString();
+    }
+
+    private sealed class ProfileModel
+    {
+        [Required]
+        [StringLength(150)]
+        [Display(Name = "Full name")]
+        public string FullName { get; set; } = "";
+
+        [Required]
+        [StringLength(50)]
+        [Display(Name = "Employee No.")]
+        public string EmployeeNo { get; set; } = "";
+
+        [Required]
+        [Display(Name = "Designation")]
+        public Designation Designation { get; set; } = Designation.Executive;
+
+        [Required(ErrorMessage = "Please select a department.")]
+        [Display(Name = "Department")]
+        public int? DepartmentId { get; set; }
+
+        [Phone]
+        [Display(Name = "Phone number")]
+        public string? PhoneNumber { get; set; }
+    }
+
+    private sealed class DeleteModel
+    {
+        [DataType(DataType.Password)]
+        public string Password { get; set; } = "";
+    }
+}

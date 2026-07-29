@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "minutesheet",
+      "runtimeExecutable": "dotnet",
+      "runtimeArgs": ["run", "--project", "minutesheet/minutesheet.csproj", "--launch-profile", "http"],
+      "port": 5285
+    }
+  ]
+}
