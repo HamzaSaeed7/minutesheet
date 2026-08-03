@@ -1,0 +1,146 @@
+@page "/admin/users"
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using minutesheet.Data
+
+@attribute [Authorize(Roles = Roles.Admin)]
+
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+
+<PageTitle>Manage Users</PageTitle>
+
+<div class="d-flex align-items-center justify-content-between mb-3">
+    <h1 class="page-title mb-0">Manage Users</h1>
+    <a class="btn btn-primary" href="admin/users/create">+ Add User</a>
+</div>
+
+<div class="content-card" style="max-width:none">
+    @if (_rows is null)
+    {
+        <p>Loading...</p>
+    }
+    else if (_rows.Count == 0)
+    {
+        <p class="text-muted mb-0">No users found.</p>
+    }
+    else
+    {
+        @if (_message is not null)
+        {
+            <div class="alert alert-info py-2">@_message</div>
+        }
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Email</th>
+                    <th>Employee No.</th>
+                    <th>Role</th>
+                    <th class="text-end">Action</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var row in _rows)
+                {
+                    <tr>
+                        <td>@(string.IsNullOrWhiteSpace(row.User.FullName) ? "—" : row.User.FullName)</td>
+                        <td>@row.User.Email</td>
+                        <td>@(string.IsNullOrWhiteSpace(row.User.EmployeeNo) ? "—" : row.User.EmployeeNo)</td>
+                        <td>
+                            <span class="badge @(row.IsAdmin ? "bg-primary" : "bg-secondary")">
+                                @(row.IsAdmin ? Roles.Admin : Roles.Employee)
+                            </span>
+                        </td>
+                        <td class="text-end">
+                            @if (row.IsSelf)
+                            {
+                                <span class="text-muted" style="font-size:12.5px;">You</span>
+                            }
+                            else if (row.IsAdmin)
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_busy"
+                                        @onclick="() => SetRole(row, makeAdmin: false)">
+                                    Make Employee
+                                </button>
+                            }
+                            else
+                            {
+                                <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_busy"
+                                        @onclick="() => SetRole(row, makeAdmin: true)">
+                                    Make Admin
+                                </button>
+                            }
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private List<UserRow>? _rows;
+    private string? _currentUserId;
+    private bool _busy;
+    private string? _message;
+
+    private sealed class UserRow
+    {
+        public required ApplicationUser User { get; init; }
+        public bool IsAdmin { get; set; }
+        public bool IsSelf { get; set; }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _currentUserId = UserManager.GetUserId(authState.User);
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        var users = await UserManager.Users.OrderBy(u => u.FullName).ToListAsync();
+        var rows = new List<UserRow>();
+        foreach (var user in users)
+        {
+            rows.Add(new UserRow
+            {
+                User = user,
+                IsAdmin = await UserManager.IsInRoleAsync(user, Roles.Admin),
+                IsSelf = user.Id == _currentUserId
+            });
+        }
+        _rows = rows;
+    }
+
+    private async Task SetRole(UserRow row, bool makeAdmin)
+    {
+        if (row.IsSelf) return; // guard against self-lockout
+        _busy = true;
+        _message = null;
+
+        if (makeAdmin)
+        {
+            await UserManager.RemoveFromRoleAsync(row.User, Roles.Employee);
+            await UserManager.AddToRoleAsync(row.User, Roles.Admin);
+        }
+        else
+        {
+            await UserManager.RemoveFromRoleAsync(row.User, Roles.Admin);
+            await UserManager.AddToRoleAsync(row.User, Roles.Employee);
+        }
+
+        // Force the user's principal to be rebuilt (picks up new role claims on next revalidation).
+        await UserManager.UpdateSecurityStampAsync(row.User);
+
+        row.IsAdmin = makeAdmin;
+        _message = $"{row.User.Email} is now {(makeAdmin ? Roles.Admin : Roles.Employee)}.";
+        _busy = false;
+    }
+}
