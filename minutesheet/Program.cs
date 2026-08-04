@@ -43,6 +43,8 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>>(sp => sp.GetRequire
 builder.Services.AddSingleton<EmailQueue>();
 builder.Services.AddHostedService<EmailBackgroundService>();
 
+builder.Services.AddScoped<minutesheet.Services.DocumentSummarizationService>();
+
 var app = builder.Build();
 
 // Seed roles (Admin/Employee) and the bootstrap admin account on startup.
