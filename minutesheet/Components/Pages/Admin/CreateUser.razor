@@ -1,0 +1,198 @@
+@page "/admin/users/create"
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using minutesheet.Data
+
+@attribute [Authorize(Roles = Roles.Admin)]
+
+@inject UserManager<ApplicationUser> UserManager
+@inject ApplicationDbContext DbContext
+@inject NavigationManager NavigationManager
+
+<PageTitle>Create User</PageTitle>
+
+<h1 class="page-title">Create User</h1>
+
+<div class="content-card">
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger py-2">@_error</div>
+    }
+    @if (_success is not null)
+    {
+        <div class="alert alert-success py-2">@_success</div>
+    }
+
+    <EditForm Model="Input" OnValidSubmit="CreateAsync" FormName="admin-create-user">
+        <DataAnnotationsValidator />
+
+        <div class="row g-3">
+            <div class="col-md-6">
+                <label class="form-label">Email</label>
+                <InputText @bind-Value="Input.Email" class="form-control" autocomplete="off" placeholder="name@example.com" />
+                <ValidationMessage For="() => Input.Email" class="text-danger" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Temporary password</label>
+                <InputText type="text" @bind-Value="Input.Password" class="form-control" autocomplete="off" placeholder="At least 6 characters" />
+                <ValidationMessage For="() => Input.Password" class="text-danger" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Full name</label>
+                <InputText @bind-Value="Input.FullName" class="form-control" placeholder="Full name" />
+                <ValidationMessage For="() => Input.FullName" class="text-danger" />
+            </div>
+            <div class="col-md-6">
+                <label class="form-label">Employee No.</label>
+                <InputText @bind-Value="Input.EmployeeNo" class="form-control" placeholder="Employee number" />
+                <ValidationMessage For="() => Input.EmployeeNo" class="text-danger" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Designation</label>
+                <InputSelect @bind-Value="Input.Designation" class="form-select">
+                    @foreach (var d in Enum.GetValues<Designation>())
+                    {
+                        <option value="@d">@DisplayName(d)</option>
+                    }
+                </InputSelect>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Department</label>
+                <InputSelect @bind-Value="Input.DepartmentId" class="form-select">
+                    <option value="">-- Select department --</option>
+                    @foreach (var dept in _departments)
+                    {
+                        <option value="@dept.Id">@dept.Name</option>
+                    }
+                </InputSelect>
+                <ValidationMessage For="() => Input.DepartmentId" class="text-danger" />
+            </div>
+            <div class="col-md-4">
+                <label class="form-label">Role</label>
+                <InputSelect @bind-Value="Input.Role" class="form-select">
+                    <option value="@Roles.Employee">@Roles.Employee</option>
+                    <option value="@Roles.Admin">@Roles.Admin</option>
+                </InputSelect>
+            </div>
+        </div>
+
+        <div class="d-flex gap-2 mt-4">
+            <button type="submit" class="btn btn-primary" disabled="@_busy">Create user</button>
+            <a class="btn btn-outline-secondary" href="admin/users">Back to users</a>
+        </div>
+    </EditForm>
+</div>
+
+@code {
+    private List<Department> _departments = new();
+    private bool _busy;
+    private string? _error;
+    private string? _success;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _departments = await DbContext.Departments.OrderBy(d => d.Name).ToListAsync();
+    }
+
+    private static string DisplayName(Designation d)
+    {
+        var member = typeof(Designation).GetMember(d.ToString()).FirstOrDefault();
+        var attr = member?.GetCustomAttributes(typeof(DisplayAttribute), false).FirstOrDefault() as DisplayAttribute;
+        return attr?.Name ?? d.ToString();
+    }
+
+    private async Task CreateAsync()
+    {
+        _error = null;
+        _success = null;
+        _busy = true;
+
+        try
+        {
+            if (await UserManager.FindByEmailAsync(Input.Email) is not null)
+            {
+                _error = $"An account with the email {Input.Email} already exists.";
+                return;
+            }
+
+            var user = new ApplicationUser
+            {
+                UserName = Input.Email,
+                Email = Input.Email,
+                // Admin-provisioned accounts are trusted, so skip the OTP step and
+                // let the user log in immediately.
+                EmailConfirmed = true,
+                FullName = Input.FullName,
+                EmployeeNo = Input.EmployeeNo,
+                Designation = Input.Designation,
+                DepartmentId = Input.DepartmentId
+            };
+
+            var result = await UserManager.CreateAsync(user, Input.Password);
+            if (!result.Succeeded)
+            {
+                _error = string.Join(", ", result.Errors.Select(e => e.Description));
+                return;
+            }
+
+            var role = Input.Role == Roles.Admin ? Roles.Admin : Roles.Employee;
+            await UserManager.AddToRoleAsync(user, role);
+
+            // Keep the department's running employee count in step with registration.
+            if (Input.DepartmentId is int deptId)
+            {
+                var dept = await DbContext.Departments.FirstOrDefaultAsync(d => d.Id == deptId);
+                if (dept is not null)
+                {
+                    dept.EmployeeCount += 1;
+                    await DbContext.SaveChangesAsync();
+                }
+            }
+
+            _success = $"Created {Input.Email} as {role}.";
+            Input = new InputModel();
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [EmailAddress]
+        [Display(Name = "Email")]
+        public string Email { get; set; } = "";
+
+        [Required]
+        [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
+        [Display(Name = "Password")]
+        public string Password { get; set; } = "";
+
+        [Required]
+        [Display(Name = "Name")]
+        public string FullName { get; set; } = "";
+
+        [Required]
+        [Display(Name = "Employee No.")]
+        public string EmployeeNo { get; set; } = "";
+
+        [Required]
+        public Designation Designation { get; set; } = Designation.Executive;
+
+        [Required(ErrorMessage = "Please select a department.")]
+        [Display(Name = "Department")]
+        public int? DepartmentId { get; set; }
+
+        [Required]
+        public string Role { get; set; } = Roles.Employee;
+    }
+}

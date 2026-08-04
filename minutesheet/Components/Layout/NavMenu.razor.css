@@ -81,6 +81,15 @@
         color: #fff;
     }
 
+.sb-section-label {
+    margin: 14px 12px 4px;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #6d72a8;
+}
+
 .sb-badge {
     margin-left: auto;
     background: #e2542f;

@@ -19,6 +19,7 @@
 @inject IWebHostEnvironment Env
 @inject NavigationManager NavigationManager
 @inject EmailQueue EmailQueue
+@inject minutesheet.Services.DocumentSummarizationService SummarizationService
 
 <PageTitle>@(_isEdit ? "Edit Minute Sheet" : "Create Minute Sheet")</PageTitle>
 
@@ -82,6 +83,15 @@ else
                         <span class="dropzone-link">@_selectedFile.Name</span> (@(_selectedFile.Size / 1024) KB)<br />
                         Click to replace
                     </div>
+                }
+            </div>
+            <div class="d-flex flex-column" style="margin-top: 16px; gap: 8px;">
+                <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingSummary" @onclick="GenerateSummaryAsync">
+                    @(_generatingSummary ? "Generating Summary..." : "Generate Summary")
+                </button>
+                @if (!string.IsNullOrEmpty(_summary))
+                {
+                    <textarea class="form-control" rows="4" readonly style="font-family: 'Poppins', sans-serif; font-size: 14px;">@_summary</textarea>
                 }
             </div>
         </div>
@@ -230,6 +240,8 @@ else
     private string? _existingAttachmentName;
     private string? _existingAttachmentPath;
     private string _initialDescriptionHtml = "";
+    private string? _summary;
+    private bool _generatingSummary;
 
     private SheetCategory _category = SheetCategory.Financial;
     private readonly List<ApprovalRow> _rows = new() { new ApprovalRow { Action = ApprovalAction.Review } };
@@ -291,6 +303,7 @@ else
                     _initialDescriptionHtml = sheet.DescriptionHtml;
                     _existingAttachmentName = sheet.AttachmentFileName;
                     _existingAttachmentPath = sheet.AttachmentStoredPath;
+                    _summary = sheet.Summary;
                     _rows.Clear();
                     _lockedSteps.Clear();
                     foreach (var step in sheet.ApprovalSteps.OrderBy(s => s.StepIndex))
@@ -460,6 +473,7 @@ else
 
                 sheet.Category = _category;
                 sheet.DescriptionHtml = descriptionHtml;
+                sheet.Summary = _summary;
 
                 // Only rebuild the workflow while every step is still pending. Once
                 // approvals are underway (reviews to resolve), the steps are locked
@@ -504,6 +518,7 @@ else
                 {
                     Category = _category,
                     DescriptionHtml = descriptionHtml,
+                    Summary = _summary,
                     AttachmentFileName = originalName,
                     AttachmentStoredPath = storedPath,
                     CreatedByUserId = user.Id,
@@ -589,6 +604,49 @@ else
             return (word.Length >= 2 ? word[..2] : word).ToUpperInvariant();
         }
         return (parts[0][..1] + parts[^1][..1]).ToUpperInvariant();
+    }
+
+    private async Task GenerateSummaryAsync()
+    {
+        _error = null;
+        _generatingSummary = true;
+        try
+        {
+            var authState = await AuthState;
+            var user = await DbContext.Users
+                .Include(u => u.Department)
+                .FirstOrDefaultAsync(u => u.UserName == authState.User.Identity!.Name);
+
+            if (user == null)
+            {
+                _error = "Could not load current user.";
+                return;
+            }
+
+            var creatorName = string.IsNullOrWhiteSpace(user.FullName) ? user.Email ?? "Unknown" : user.FullName;
+            var creatorDesignation = DesignationName(user.Designation);
+            var creatorDepartment = user.Department?.Name ?? "N/A";
+            var creatorEmpNo = user.EmployeeNo ?? "N/A";
+
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+            
+            _summary = await SummarizationService.GenerateSummaryAsync(
+                _category.ToString(), 
+                creatorName, 
+                creatorDesignation, 
+                creatorDepartment, 
+                creatorEmpNo, 
+                descriptionHtml, 
+                _selectedFile);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to generate summary: {ex.Message}";
+        }
+        finally
+        {
+            _generatingSummary = false;
+        }
     }
 
     public async ValueTask DisposeAsync()

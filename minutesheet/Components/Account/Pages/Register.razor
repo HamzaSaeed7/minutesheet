@@ -127,6 +127,9 @@
 
         Logger.LogInformation("User created a new account with password.");
 
+        // Every self-registered account is an Employee; Admins are granted separately.
+        await UserManager.AddToRoleAsync(user, Roles.Employee);
+
         // Increment the department's running employee count.
         if (Input.DepartmentId is int deptId)
         {

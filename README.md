@@ -34,6 +34,10 @@ Brand: `#000066` · Poppins.
   - `/dashboard/history` — the user's own sheets, with status, approval progress, and edit/delete/open actions.
   - `/dashboard/actions` — items **pending your approval** and **reviews to resolve**.
 
+- **AI Summary Generation**
+  - **Document Transcribing:** Automatically extracts textual content from attached PDF (`PdfPig`) and Word (`DocumentFormat.OpenXml`) files.
+  - **Smart Summaries:** Connects to the OpenRouter AI API to generate professional summaries based on the sheet's description and transcribed attachment content.
+
 - **Email delivery** — prefers the **Brevo HTTP API** (HTTPS/443, rarely blocked); falls back to **SMTP** (MailKit) when only SMTP settings are provided. Mail failures never break signup or a workflow action.
 
 ---
@@ -47,6 +51,7 @@ Brand: `#000066` · Poppins.
 | Data        | Entity Framework Core + SQL Server LocalDB |
 | Email       | Brevo HTTP API or SMTP via MailKit |
 | Rich text   | Quill (self-hosted under `wwwroot/lib/quill`) |
+| Summaries   | OpenRouter API + PdfPig/DocumentFormat.OpenXml for text extraction |
 | 2FA QR      | QRCoder |
 | UI          | Bootstrap + custom CSS (`wwwroot/app.css`), Poppins |
 
@@ -83,11 +88,20 @@ dotnet ef database update --project minutesheet
 
 > No `dotnet-ef`? The app also runs the migrations endpoint in Development, so you can apply pending migrations from the error page on first run.
 
-### 3. Configure email (optional but recommended)
+### 3. Configure secrets (email and API keys)
 
-`appsettings.json` ships with **empty** email placeholders — **never commit real credentials**. Provide them via [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets) instead. A `UserSecretsId` is already set on the project.
+`appsettings.json` ships with **empty** placeholders — **never commit real credentials**. Provide them via [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets) instead. A `UserSecretsId` is already set on the project.
 
-**Option A — Brevo HTTP API (recommended):**
+**OpenRouter AI Summarization (Required for Summaries):**
+
+To enable AI summaries and transcription of attachments, provide an OpenRouter API key:
+
+```bash
+cd minutesheet
+dotnet user-secrets set "OpenRouterSettings:ApiKey" "sk-or-v1-your-key"
+```
+
+**Email Option A — Brevo HTTP API (recommended):**
 
 ```bash
 cd minutesheet
@@ -132,6 +146,12 @@ Then open the URL shown in the console (defaults: `http://localhost:5285`, `http
 | `EnableSsl`| Use TLS for SMTP. |
 | `From`     | Sender address (must be a verified sender). |
 | `FromName` | Sender display name (default `Minute Sheet`). |
+
+`OpenRouterSettings` (bind from config or user-secrets):
+
+| Key        | Description |
+|------------|-------------|
+| `ApiKey`   | OpenRouter API key for generating AI document summaries (`sk-or-v1-...`). |
 
 `ConnectionStrings:DefaultConnection` — the SQL Server connection string.
 

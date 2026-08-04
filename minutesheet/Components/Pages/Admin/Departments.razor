@@ -1,0 +1,173 @@
+@page "/admin/departments"
+@rendermode InteractiveServer
+
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.EntityFrameworkCore
+@using minutesheet.Data
+
+@attribute [Authorize(Roles = Roles.Admin)]
+
+@inject ApplicationDbContext DbContext
+@inject IJSRuntime JS
+
+<PageTitle>Manage Departments</PageTitle>
+
+<h1 class="page-title">Manage Departments</h1>
+
+<div class="content-card">
+    <div class="d-flex gap-2 mb-3">
+        <input class="form-control" placeholder="New department name" @bind="_newName" @bind:event="oninput"
+               @onkeydown="@(e => { if (e.Key == "Enter") return AddAsync(); return Task.CompletedTask; })" />
+        <button type="button" class="btn btn-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_newName))"
+                @onclick="AddAsync">Add</button>
+    </div>
+
+    @if (_error is not null)
+    {
+        <div class="alert alert-danger py-2">@_error</div>
+    }
+
+    @if (_departments is null)
+    {
+        <p>Loading...</p>
+    }
+    else if (_departments.Count == 0)
+    {
+        <p class="text-muted mb-0">No departments yet.</p>
+    }
+    else
+    {
+        <table class="table table-hover align-middle">
+            <thead>
+                <tr>
+                    <th>Name</th>
+                    <th>Employees</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var dept in _departments)
+                {
+                    <tr>
+                        <td>
+                            @if (_editingId == dept.Id)
+                            {
+                                <input class="form-control form-control-sm" @bind="_editName" />
+                            }
+                            else
+                            {
+                                @dept.Name
+                            }
+                        </td>
+                        <td>@dept.EmployeeCount</td>
+                        <td class="text-end">
+                            <div class="d-flex gap-2 justify-content-end">
+                                @if (_editingId == dept.Id)
+                                {
+                                    <button type="button" class="btn btn-sm btn-primary" disabled="@_busy"
+                                            @onclick="() => SaveEditAsync(dept)">Save</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_busy"
+                                            @onclick="CancelEdit">Cancel</button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_busy"
+                                            @onclick="() => BeginEdit(dept)">Rename</button>
+                                    <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_busy"
+                                            @onclick="() => DeleteAsync(dept)">Delete</button>
+                                }
+                            </div>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    }
+</div>
+
+@code {
+    private List<Department>? _departments;
+    private string _newName = "";
+    private int? _editingId;
+    private string _editName = "";
+    private bool _busy;
+    private string? _error;
+
+    protected override async Task OnInitializedAsync() => await LoadAsync();
+
+    private async Task LoadAsync()
+    {
+        _departments = await DbContext.Departments.OrderBy(d => d.Name).ToListAsync();
+    }
+
+    private async Task AddAsync()
+    {
+        _error = null;
+        var name = _newName.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        if (await DbContext.Departments.AnyAsync(d => d.Name == name))
+        {
+            _error = $"A department named \"{name}\" already exists.";
+            return;
+        }
+
+        _busy = true;
+        DbContext.Departments.Add(new Department { Name = name, EmployeeCount = 0 });
+        await DbContext.SaveChangesAsync();
+        _newName = "";
+        await LoadAsync();
+        _busy = false;
+    }
+
+    private void BeginEdit(Department dept)
+    {
+        _editingId = dept.Id;
+        _editName = dept.Name;
+        _error = null;
+    }
+
+    private void CancelEdit()
+    {
+        _editingId = null;
+        _editName = "";
+    }
+
+    private async Task SaveEditAsync(Department dept)
+    {
+        _error = null;
+        var name = _editName.Trim();
+        if (string.IsNullOrWhiteSpace(name)) return;
+
+        if (await DbContext.Departments.AnyAsync(d => d.Name == name && d.Id != dept.Id))
+        {
+            _error = $"A department named \"{name}\" already exists.";
+            return;
+        }
+
+        _busy = true;
+        var tracked = await DbContext.Departments.FirstAsync(d => d.Id == dept.Id);
+        tracked.Name = name;
+        await DbContext.SaveChangesAsync();
+        _editingId = null;
+        await LoadAsync();
+        _busy = false;
+    }
+
+    private async Task DeleteAsync(Department dept)
+    {
+        var confirmed = await JS.InvokeAsync<bool>("confirm",
+            $"Delete \"{dept.Name}\"? Users in this department will be left without one.");
+        if (!confirmed) return;
+
+        _busy = true;
+        var tracked = await DbContext.Departments.FirstOrDefaultAsync(d => d.Id == dept.Id);
+        if (tracked is not null)
+        {
+            DbContext.Departments.Remove(tracked);
+            await DbContext.SaveChangesAsync();
+            await LoadAsync();
+        }
+        _busy = false;
+    }
+}
