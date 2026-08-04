@@ -66,6 +66,10 @@ else
             {
                 <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="DeleteSheet">Delete</button>
             }
+            @if (_sheet.IsConfidential)
+            {
+                <span class="badge bg-danger" style="font-size:13px;padding:6px 16px;" title="Only the creator, listed approvers and admins can view this sheet.">Confidential</span>
+            }
             <span class="badge @SheetStatusClass(_currentStatus)" style="font-size:13px;padding:6px 16px;">@_currentStatus</span>
         </div>
 
@@ -83,6 +87,14 @@ else
                 <div style="font-weight:500;">@ApprovalWorkflow.ApprovedCount(_sheet.ApprovalSteps) / @_sheet.ApprovalSteps.Count approved</div>
             </div>
         </div>
+
+        @if (!string.IsNullOrEmpty(_sheet.Summary))
+        {
+            <div class="mb-3">
+                <div class="creator-label mb-1" style="color: #000066; font-weight: 600;">Summary (AI Generated)</div>
+                <div class="description-body" style="font-family: 'Poppins', sans-serif; background-color: #f8f9fa; padding: 12px; border-radius: 6px;">@_sheet.Summary</div>
+            </div>
+        }
 
         <div class="mb-3">
             <div class="creator-label mb-1">Description</div>
@@ -213,6 +225,7 @@ else
     private bool _loading = true;
     private bool _canView;
     private bool _isCreator;
+    private bool _isAdmin;
     private bool _canEdit;
     private string? _error;
     private bool _busy;
@@ -234,6 +247,7 @@ else
 
         var authState = await AuthState;
         _me = await UserManager.GetUserAsync(authState.User);
+        _isAdmin = authState.User.IsInRole(Roles.Admin);
         await LoadAsync();
         _loading = false;
     }
@@ -267,7 +281,9 @@ else
                                   || _sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed));
         var myEmail = _me.Email ?? "";
         var isApprover = _sheet.ApprovalSteps.Any(s => string.Equals(s.ApproverEmail, myEmail, StringComparison.OrdinalIgnoreCase));
-        _canView = _isCreator || isApprover;
+        // Non-confidential sheets are visible to every user. Confidential sheets
+        // are restricted to the creator, listed approvers and admins.
+        _canView = !_sheet.IsConfidential || _isCreator || isApprover || _isAdmin;
 
         _currentStatus = ApprovalWorkflow.StatusFor(_sheet);
 

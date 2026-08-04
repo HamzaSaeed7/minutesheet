@@ -19,6 +19,7 @@
 @inject IWebHostEnvironment Env
 @inject NavigationManager NavigationManager
 @inject EmailQueue EmailQueue
+@inject minutesheet.Services.DocumentSummarizationService SummarizationService
 
 <PageTitle>@(_isEdit ? "Edit Minute Sheet" : "Create Minute Sheet")</PageTitle>
 
@@ -54,7 +55,25 @@ else
         </div>
 
         <div class="content-card">
-            <div class="card-eyebrow" style="margin-bottom:10px;">Description</div>
+            <div class="card-eyebrow" style="margin-bottom:10px;">Confidentiality</div>
+            <div class="seg-tabs">
+                <button type="button" class="seg-tab @(!_isConfidential ? "active" : "")" @onclick="() => _isConfidential = false">Non-Confidential</button>
+                <button type="button" class="seg-tab @(_isConfidential ? "active" : "")" @onclick="() => _isConfidential = true">Confidential</button>
+            </div>
+            <div style="font-size:12.5px;color:#9296ab;margin-top:10px;">
+                Non-confidential sheets can be viewed by every user. Confidential sheets can only be viewed by you, the approvers listed below, and admins.
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="d-flex align-items-center justify-content-between" style="margin-bottom:10px;">
+                <div class="card-eyebrow">Description</div>
+                <button type="button" class="dictate-btn" onclick="quillInterop.toggleDictation('editor', this)"
+                        aria-label="Dictate description" title="Dictate with your voice">
+                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                    <span class="dictate-label">Dictate</span>
+                </button>
+            </div>
             <div id="editor" style="min-height:180px;"></div>
         </div>
 
@@ -82,6 +101,15 @@ else
                         <span class="dropzone-link">@_selectedFile.Name</span> (@(_selectedFile.Size / 1024) KB)<br />
                         Click to replace
                     </div>
+                }
+            </div>
+            <div class="d-flex flex-column" style="margin-top: 16px; gap: 8px;">
+                <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingSummary" @onclick="GenerateSummaryAsync">
+                    @(_generatingSummary ? "Generating Summary..." : "Generate Summary")
+                </button>
+                @if (!string.IsNullOrEmpty(_summary))
+                {
+                    <textarea class="form-control" rows="4" readonly style="font-family: 'Poppins', sans-serif; font-size: 14px;">@_summary</textarea>
                 }
             </div>
         </div>
@@ -230,8 +258,11 @@ else
     private string? _existingAttachmentName;
     private string? _existingAttachmentPath;
     private string _initialDescriptionHtml = "";
+    private string? _summary;
+    private bool _generatingSummary;
 
     private SheetCategory _category = SheetCategory.Financial;
+    private bool _isConfidential;
     private readonly List<ApprovalRow> _rows = new() { new ApprovalRow { Action = ApprovalAction.Review } };
     private List<string> _approverEmails = new();
     private ApplicationUser? _creator;
@@ -288,9 +319,11 @@ else
                 else
                 {
                     _category = sheet.Category;
+                    _isConfidential = sheet.IsConfidential;
                     _initialDescriptionHtml = sheet.DescriptionHtml;
                     _existingAttachmentName = sheet.AttachmentFileName;
                     _existingAttachmentPath = sheet.AttachmentStoredPath;
+                    _summary = sheet.Summary;
                     _rows.Clear();
                     _lockedSteps.Clear();
                     foreach (var step in sheet.ApprovalSteps.OrderBy(s => s.StepIndex))
@@ -459,7 +492,9 @@ else
                 }
 
                 sheet.Category = _category;
+                sheet.IsConfidential = _isConfidential;
                 sheet.DescriptionHtml = descriptionHtml;
+                sheet.Summary = _summary;
 
                 // Only rebuild the workflow while every step is still pending. Once
                 // approvals are underway (reviews to resolve), the steps are locked
@@ -503,7 +538,9 @@ else
                 var sheet = new MinuteSheet
                 {
                     Category = _category,
+                    IsConfidential = _isConfidential,
                     DescriptionHtml = descriptionHtml,
+                    Summary = _summary,
                     AttachmentFileName = originalName,
                     AttachmentStoredPath = storedPath,
                     CreatedByUserId = user.Id,
@@ -589,6 +626,49 @@ else
             return (word.Length >= 2 ? word[..2] : word).ToUpperInvariant();
         }
         return (parts[0][..1] + parts[^1][..1]).ToUpperInvariant();
+    }
+
+    private async Task GenerateSummaryAsync()
+    {
+        _error = null;
+        _generatingSummary = true;
+        try
+        {
+            var authState = await AuthState;
+            var user = await DbContext.Users
+                .Include(u => u.Department)
+                .FirstOrDefaultAsync(u => u.UserName == authState.User.Identity!.Name);
+
+            if (user == null)
+            {
+                _error = "Could not load current user.";
+                return;
+            }
+
+            var creatorName = string.IsNullOrWhiteSpace(user.FullName) ? user.Email ?? "Unknown" : user.FullName;
+            var creatorDesignation = DesignationName(user.Designation);
+            var creatorDepartment = user.Department?.Name ?? "N/A";
+            var creatorEmpNo = user.EmployeeNo ?? "N/A";
+
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+            
+            _summary = await SummarizationService.GenerateSummaryAsync(
+                _category.ToString(), 
+                creatorName, 
+                creatorDesignation, 
+                creatorDepartment, 
+                creatorEmpNo, 
+                descriptionHtml, 
+                _selectedFile);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to generate summary: {ex.Message}";
+        }
+        finally
+        {
+            _generatingSummary = false;
+        }
     }
 
     public async ValueTask DisposeAsync()

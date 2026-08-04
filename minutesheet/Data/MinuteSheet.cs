@@ -10,6 +10,8 @@ namespace minutesheet.Data
 
         // Rich-text HTML produced by the Quill editor.
         public string DescriptionHtml { get; set; } = "";
+        
+        public string? Summary { get; set; }
 
         // Original file name as uploaded by the user (null when no attachment).
         [MaxLength(260)]
@@ -18,6 +20,9 @@ namespace minutesheet.Data
         // Relative path under wwwroot where the file is stored (e.g. uploads/{guid}.pdf).
         [MaxLength(400)]
         public string? AttachmentStoredPath { get; set; }
+
+        // When true, only the creator, listed approvers and admins can view the sheet.
+        public bool IsConfidential { get; set; }
 
         [Required]
         public string CreatedByUserId { get; set; } = "";
