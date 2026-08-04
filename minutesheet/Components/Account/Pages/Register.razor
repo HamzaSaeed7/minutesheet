@@ -151,7 +151,8 @@
 
         if (sent)
         {
-            RedirectManager.RedirectTo(verifyUri);
+            RedirectManager.RedirectToWithStatus(verifyUri,
+                "Account created! Check your email for the 6-digit verification code.", HttpContext);
         }
         else
         {

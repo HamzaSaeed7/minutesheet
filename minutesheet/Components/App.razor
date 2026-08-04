@@ -14,6 +14,7 @@
     <link rel="stylesheet" href="lib/quill/quill.snow.css" />
     <link rel="stylesheet" href="@($"app.css?v={CssVersion("app.css")}")" />
     <link rel="stylesheet" href="@($"minutesheet.styles.css?v={CssVersion("minutesheet.styles.css")}")" />
+    <link rel="icon" type="image/svg+xml" href="@($"favicon.svg?v={CssVersion("favicon.svg")}")" />
     <link rel="icon" type="image/png" href="favicon.png" />
     <HeadOutlet />
 </head>
@@ -23,7 +24,7 @@
     <script src="_framework/blazor.web.js"></script>
     <script src="https://unpkg.com/compromise"></script>
     <script src="lib/quill/quill.js"></script>
-    <script src="js/quill-interop.js"></script>
+    <script src="js/quill-interop.js?v=@CssVersion("js/quill-interop.js")"></script>
 </body>
 
 </html>

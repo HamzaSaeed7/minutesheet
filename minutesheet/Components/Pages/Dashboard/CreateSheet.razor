@@ -20,8 +20,11 @@
 @inject NavigationManager NavigationManager
 @inject EmailQueue EmailQueue
 @inject minutesheet.Services.DocumentSummarizationService SummarizationService
+@inject minutesheet.Services.ToastService ToastService
 
 <PageTitle>@(_isEdit ? "Edit Minute Sheet" : "Create Minute Sheet")</PageTitle>
+
+<ToastHost />
 
 @if (_isEdit && _loading)
 {
@@ -57,11 +60,18 @@ else
         <div class="content-card">
             <div class="d-flex align-items-center justify-content-between" style="margin-bottom:10px;">
                 <div class="card-eyebrow">Description</div>
-                <button type="button" class="dictate-btn" onclick="quillInterop.toggleDictation('editor', this)"
-                        aria-label="Dictate description" title="Dictate with your voice">
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
-                    <span class="dictate-label">Dictate</span>
-                </button>
+                <div class="d-flex align-items-center" style="gap:8px;">
+                    <select id="dictateLang" class="form-select form-select-sm" style="width:auto;" aria-label="Dictation language">
+                        <option value="en-US">English</option>
+                        <option value="ur-PK">Urdu</option>
+                    </select>
+                    <button type="button" class="dictate-btn"
+                            onclick="quillInterop.toggleDictation('editor', this, document.getElementById('dictateLang').value)"
+                            aria-label="Dictate description" title="Dictate with your voice">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                        <span class="dictate-label">Dictate</span>
+                    </button>
+                </div>
             </div>
             <div id="editor" style="min-height:180px;"></div>
         </div>
@@ -387,13 +397,13 @@ else
         var ext = Path.GetExtension(file.Name).ToLowerInvariant();
         if (!AllowedExtensions.Contains(ext))
         {
-            _error = "Only PDF and Word (.doc/.docx) files are allowed.";
+            ToastService.ShowError("Only PDF and Word (.doc/.docx) files are allowed.", "Unsupported file");
             _selectedFile = null;
             return;
         }
         if (file.Size > MaxFileSize)
         {
-            _error = "File exceeds the 10 MB limit.";
+            ToastService.ShowError("File exceeds the 10 MB limit.", "File too large");
             _selectedFile = null;
             return;
         }
@@ -410,13 +420,13 @@ else
 
             if (string.IsNullOrWhiteSpace(descriptionHtml))
             {
-                _error = "Please enter a description.";
+                ToastService.ShowError("Please enter a description.", "Missing description");
                 return;
             }
 
             if (!_workflowLocked && _rows.Any(r => string.IsNullOrWhiteSpace(r.ApproverEmail)))
             {
-                _error = "Please select an approver email for every approval row.";
+                ToastService.ShowError("Please select an approver email for every approval row.", "Missing approver");
                 return;
             }
 
@@ -424,7 +434,7 @@ else
             var user = await UserManager.GetUserAsync(authState.User);
             if (user is null)
             {
-                _error = "Your session has expired. Please log in again.";
+                ToastService.ShowError("Your session has expired. Please log in again.", "Session expired");
                 return;
             }
 
@@ -460,7 +470,7 @@ else
 
                 if (sheet is null || sheet.CreatedByUserId != user.Id || !(allPending || hasReviews))
                 {
-                    _error = "This minute sheet can no longer be edited.";
+                    ToastService.ShowError("This minute sheet can no longer be edited.", "Cannot edit");
                     return;
                 }
 
@@ -517,7 +527,8 @@ else
                     }
                 }
 
-                NavigationManager.NavigateTo($"dashboard/sheet/{sheetToken}");
+                ToastService.ShowSuccess("Your minute sheet changes were saved and approvers notified.", "Changes saved");
+                NavigationManager.NavigateTo($"/dashboard/sheet/{sheetToken}", forceLoad: false);
             }
             else
             {
@@ -560,12 +571,13 @@ else
                         link));
                 }
 
-                NavigationManager.NavigateTo("dashboard/history");
+                ToastService.ShowSuccess("Your minute sheet was submitted successfully and approvers have been notified.", "Submitted");
+                NavigationManager.NavigateTo("/dashboard/history", forceLoad: false);
             }
         }
         catch (Exception ex)
         {
-            _error = $"Something went wrong: {ex.Message}";
+            ToastService.ShowError($"Something went wrong: {ex.Message}", "Error");
         }
         finally
         {
@@ -626,7 +638,7 @@ else
 
             if (user == null)
             {
-                _error = "Could not load current user.";
+                ToastService.ShowError("Could not load current user.", "Error");
                 return;
             }
 
@@ -645,10 +657,12 @@ else
                 creatorEmpNo, 
                 descriptionHtml, 
                 _selectedFile);
+
+            ToastService.ShowSuccess("Summary generated for your minute sheet.", "Summary ready");
         }
         catch (Exception ex)
         {
-            _error = $"Failed to generate summary: {ex.Message}";
+            ToastService.ShowError($"Failed to generate summary: {ex.Message}", "Error");
         }
         finally
         {

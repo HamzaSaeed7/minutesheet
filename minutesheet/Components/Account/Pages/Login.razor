@@ -104,7 +104,7 @@
         if (result.Succeeded)
         {
             Logger.LogInformation("User logged in.");
-            RedirectManager.RedirectTo(ReturnUrl);
+            RedirectManager.RedirectToWithStatus(ReturnUrl, "You're logged in. Welcome back!", HttpContext);
         }
         else if (result.RequiresTwoFactor)
         {
