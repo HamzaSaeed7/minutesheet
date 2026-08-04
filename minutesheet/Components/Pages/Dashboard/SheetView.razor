@@ -221,6 +221,7 @@ else
     private bool _loading = true;
     private bool _canView;
     private bool _isCreator;
+    private bool _isAdmin;
     private bool _canEdit;
     private string? _error;
     private bool _busy;
@@ -242,6 +243,7 @@ else
 
         var authState = await AuthState;
         _me = await UserManager.GetUserAsync(authState.User);
+        _isAdmin = authState.User.IsInRole(Roles.Admin);
         await LoadAsync();
         _loading = false;
     }
@@ -275,7 +277,9 @@ else
                                   || _sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed));
         var myEmail = _me.Email ?? "";
         var isApprover = _sheet.ApprovalSteps.Any(s => string.Equals(s.ApproverEmail, myEmail, StringComparison.OrdinalIgnoreCase));
-        _canView = _isCreator || isApprover;
+        // Admins have read access to every sheet; edit/approve/delete stay tied to
+        // being the creator or a designated approver.
+        _canView = _isCreator || isApprover || _isAdmin;
 
         _currentStatus = ApprovalWorkflow.StatusFor(_sheet);
 

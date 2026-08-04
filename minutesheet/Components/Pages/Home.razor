@@ -4,6 +4,7 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
+@using System.Globalization
 @using minutesheet.Data
 
 @attribute [Authorize]
@@ -39,6 +40,58 @@
         <div class="stat-label">Total sheets</div>
         <div class="stat-value" style="color:#14173a;">@_total</div>
         <div class="stat-sub">you've created</div>
+    </div>
+</div>
+
+<div class="section-title">Overview</div>
+<div class="chart-grid">
+    <div class="chart-card">
+        <div class="chart-head">Approval status</div>
+        @{
+            var done = _approved;
+            var inProgress = Math.Max(0, _total - _approved);
+            var donutTotal = done + inProgress;
+            const double r = 52;
+            var circ = 2 * Math.PI * r;
+            var approvedLen = donutTotal == 0 ? 0 : circ * done / donutTotal;
+            string F(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+        }
+        <div class="donut-wrap">
+            <svg viewBox="0 0 140 140" width="150" height="150">
+                <circle cx="70" cy="70" r="52" fill="none" stroke="#eef0f6" stroke-width="16"></circle>
+                @if (donutTotal > 0)
+                {
+                    <circle cx="70" cy="70" r="52" fill="none" stroke="#e2a138" stroke-width="16"></circle>
+                    <circle cx="70" cy="70" r="52" fill="none" stroke="#17875a" stroke-width="16"
+                            stroke-dasharray="@F(approvedLen) @F(circ - approvedLen)"
+                            stroke-linecap="round" transform="rotate(-90 70 70)"></circle>
+                }
+                <text x="70" y="66" text-anchor="middle" class="donut-num">@_total</text>
+                <text x="70" y="86" text-anchor="middle" class="donut-cap">total sheets</text>
+            </svg>
+        </div>
+        <div class="chart-legend">
+            <span class="lg"><i style="background:#17875a"></i>Approved @done</span>
+            <span class="lg"><i style="background:#e2a138"></i>In progress @inProgress</span>
+        </div>
+    </div>
+
+    <div class="chart-card">
+        <div class="chart-head">Activity · last 6 months</div>
+        @{
+            var maxMonth = _monthly.Count == 0 ? 0 : _monthly.Max(m => m.Count);
+        }
+        <div class="bar-chart">
+            @foreach (var m in _monthly)
+            {
+                var h = maxMonth == 0 ? 0 : (int)Math.Round(m.Count * 100.0 / maxMonth);
+                <div class="bar-col">
+                    <div class="bar-val">@(m.Count > 0 ? m.Count.ToString() : "")</div>
+                    <div class="bar-track"><div class="bar-fill" style="height:@(h)%"></div></div>
+                    <div class="bar-lbl">@m.Label</div>
+                </div>
+            }
+        </div>
     </div>
 </div>
 
@@ -90,6 +143,7 @@
     private int _approved;
     private int _total;
     private List<MinuteSheet> _recent = new();
+    private List<(string Label, int Count)> _monthly = new();
 
     private string Greeting => DateTime.Now.Hour switch
     {
@@ -124,5 +178,18 @@
         _approved = mySheets.Count(m => ApprovalWorkflow.IsFullyApproved(m.ApprovalSteps));
         _reviewsToResolve = mySheets.Count(m => m.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed));
         _recent = mySheets.Take(5).ToList();
+
+        // Sheets created per month over the trailing 6-month window (oldest first).
+        var firstOfThisMonth = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
+        for (var i = 5; i >= 0; i--)
+        {
+            var month = firstOfThisMonth.AddMonths(-i);
+            var count = mySheets.Count(m =>
+            {
+                var d = m.CreatedAt.ToLocalTime();
+                return d.Year == month.Year && d.Month == month.Month;
+            });
+            _monthly.Add((month.ToString("MMM"), count));
+        }
     }
 }
