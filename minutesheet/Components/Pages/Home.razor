@@ -3,6 +3,7 @@
 
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Components.Web
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
 @using System.Globalization
@@ -13,138 +14,1276 @@
 @inject ApplicationDbContext DbContext
 @inject UserManager<ApplicationUser> UserManager
 @inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
+@inject IJSRuntime JS
 
 <PageTitle>Dashboard</PageTitle>
 
-<div style="margin-bottom:30px;">
-    <div class="dash-greeting-title">@Greeting, @_firstName</div>
-    <div class="dash-greeting-sub">@DateTime.Now.ToString("dddd, dd MMMM") · here's what's happening with your minute sheets.</div>
-</div>
+<style>
+    :root {
+        --page-bg: #f3f4fb;
+        --card-bg: #ffffff;
+        --border-color: #eef0f6;
+        --text-primary: #14173a;
+        --text-secondary: #6b7086;
+        --text-muted: #9296ab;
+        --hover-bg: #f8f9fd;
+        --track-bg: #f1f2f8;
+        --header-bg: #fafafe;
+    }
 
-<div class="stat-grid">
-    <div class="stat-card">
-        <div class="stat-label">Pending your approval</div>
-        <div class="stat-value" style="color:#b26a00;">@_pendingApproval</div>
-        <div class="stat-sub">awaiting your action</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-label">Reviews to resolve</div>
-        <div class="stat-value" style="color:#3548d4;">@_reviewsToResolve</div>
-        <div class="stat-sub">sent back to you</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-label">Approved</div>
-        <div class="stat-value" style="color:#17875a;">@_approved</div>
-        <div class="stat-sub">of your sheets</div>
-    </div>
-    <div class="stat-card">
-        <div class="stat-label">Total sheets</div>
-        <div class="stat-value" style="color:#14173a;">@_total</div>
-        <div class="stat-sub">you've created</div>
-    </div>
-</div>
+    [data-theme="dark"] {
+        --page-bg: #0e1024;
+        --card-bg: #171a35;
+        --border-color: #272b52;
+        --text-primary: #f3f4fb;
+        --text-secondary: #b7bbe0;
+        --text-muted: #8890a6;
+        --hover-bg: #1e2142;
+        --track-bg: #21254a;
+        --header-bg: #1b1e3d;
+    }
 
-<div class="section-title">Overview</div>
-<div class="chart-grid">
-    <div class="chart-card">
-        <div class="chart-head">Approval status</div>
-        @{
-            var done = _approved;
-            var inProgress = Math.Max(0, _total - _approved);
-            var donutTotal = done + inProgress;
-            const double r = 52;
-            var circ = 2 * Math.PI * r;
-            var approvedLen = donutTotal == 0 ? 0 : circ * done / donutTotal;
-            string F(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+    .dash-wrap {
+        max-width: 1320px;
+        background: var(--page-bg);
+        padding: 4px;
+        border-radius: 20px;
+        transition: background .25s ease;
+    }
+
+    /* ---------- Top bar ---------- */
+    .topbar {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 18px;
+        margin-bottom: 22px;
+        flex-wrap: wrap;
+    }
+
+    .topbar-left {
+        min-width: 140px;
+    }
+
+    .topbar-title {
+        font-size: 20px;
+        font-weight: 800;
+        color: var(--text-primary);
+    }
+
+    .topbar-date {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        font-size: 12.5px;
+        color: var(--text-muted);
+        margin-top: 3px;
+    }
+
+    .topbar-search {
+        flex: 1;
+        max-width: 420px;
+        min-width: 180px;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 12px;
+        padding: 9px 14px;
+        color: var(--text-muted);
+        transition: background .25s ease, border-color .25s ease;
+    }
+
+        .topbar-search input {
+            border: none;
+            outline: none;
+            background: transparent;
+            flex: 1;
+            font-size: 13px;
+            color: var(--text-primary);
+            min-width: 0;
         }
-        <div class="donut-wrap">
-            <svg viewBox="0 0 140 140" width="150" height="150">
-                <circle cx="70" cy="70" r="52" fill="none" stroke="#eef0f6" stroke-width="16"></circle>
-                @if (donutTotal > 0)
+
+            .topbar-search input::placeholder {
+                color: var(--text-muted);
+            }
+
+        .topbar-search .kbd {
+            font-size: 11px;
+            font-weight: 700;
+            color: var(--text-muted);
+            background: var(--track-bg);
+            padding: 2px 6px;
+            border-radius: 6px;
+        }
+
+    .topbar-right {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .icon-btn {
+        position: relative;
+        width: 38px;
+        height: 38px;
+        border-radius: 11px;
+        border: 1px solid var(--border-color);
+        background: var(--card-bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: var(--text-secondary);
+        cursor: pointer;
+        transition: background .2s ease, transform .15s ease;
+        flex-shrink: 0;
+    }
+
+        .icon-btn:hover {
+            background: var(--hover-bg);
+            transform: translateY(-1px);
+        }
+
+    .dot-badge {
+        position: absolute;
+        top: -4px;
+        right: -4px;
+        background: #e2554a;
+        color: #fff;
+        font-size: 10px;
+        font-weight: 700;
+        min-width: 16px;
+        height: 16px;
+        border-radius: 999px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 0 4px;
+    }
+
+    .notif-wrap {
+        position: relative;
+    }
+
+    .notif-panel {
+        position: absolute;
+        top: 46px;
+        right: 0;
+        width: 300px;
+        max-height: 340px;
+        overflow-y: auto;
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 14px;
+        box-shadow: 0 12px 30px rgba(20, 23, 58, .14);
+        z-index: 40;
+        padding: 6px;
+    }
+
+    .notif-head {
+        font-size: 12px;
+        font-weight: 700;
+        color: var(--text-secondary);
+        padding: 10px 12px 6px;
+    }
+
+    .notif-empty {
+        font-size: 12.5px;
+        color: var(--text-muted);
+        padding: 14px 12px;
+    }
+
+    .notif-item {
+        padding: 10px 12px;
+        border-radius: 10px;
+        cursor: pointer;
+        transition: background .15s ease;
+    }
+
+        .notif-item:hover {
+            background: var(--hover-bg);
+        }
+
+    .notif-title {
+        font-size: 12.5px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .notif-sub {
+        font-size: 11.5px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    .user-chip {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        padding: 5px 12px 5px 5px;
+        border-radius: 12px;
+        border: 1px solid var(--border-color);
+        background: var(--card-bg);
+        cursor: default;
+    }
+
+    .avatar {
+        width: 30px;
+        height: 30px;
+        border-radius: 50%;
+        background: linear-gradient(135deg, #4f46e5, #818cf8);
+        color: #fff;
+        font-weight: 700;
+        font-size: 12.5px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .user-name {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-primary);
+        line-height: 1.2;
+    }
+
+    .user-role {
+        font-size: 11px;
+        color: var(--text-muted);
+    }
+
+    .dash-header {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 16px;
+        margin-bottom: 26px;
+        flex-wrap: wrap;
+    }
+
+    .dash-greeting-title {
+        font-size: 26px;
+        font-weight: 700;
+        color: var(--text-primary);
+        letter-spacing: -0.02em;
+    }
+
+    .dash-greeting-sub {
+        font-size: 14px;
+        color: var(--text-muted);
+        margin-top: 4px;
+        display: flex;
+        align-items: center;
+        gap: 6px;
+    }
+
+    .section-title {
+        font-size: 15px;
+        font-weight: 700;
+        color: var(--text-primary);
+        margin: 30px 0 14px;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .section-link {
+        font-size: 12.5px;
+        font-weight: 700;
+        color: #3548d4;
+        text-decoration: none;
+    }
+
+        .section-link:hover {
+            text-decoration: underline;
+        }
+
+    /* ---------- Stat cards ---------- */
+    .stat-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 18px;
+    }
+
+    @@media (max-width: 1100px) {
+        .stat-grid {
+            grid-template-columns: repeat(2, 1fr);
+        }
+    }
+
+    @@media (max-width: 560px) {
+        .stat-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .stat-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 18px;
+        padding: 20px 20px 16px;
+        box-shadow: 0 1px 2px rgba(20, 23, 58, .04);
+        transition: box-shadow .2s ease, transform .2s ease, background .25s ease, border-color .25s ease;
+    }
+
+        .stat-card:hover {
+            box-shadow: 0 10px 26px rgba(20, 23, 58, .09);
+            transform: translateY(-2px);
+        }
+
+    .stat-top {
+        display: flex;
+        align-items: flex-start;
+        justify-content: space-between;
+        gap: 10px;
+    }
+
+    .stat-label {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-secondary);
+    }
+
+    .stat-icon {
+        width: 38px;
+        height: 38px;
+        border-radius: 11px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .stat-icon-amber {
+        background: #fff4e0;
+        color: #b26a00;
+    }
+
+    .stat-icon-blue {
+        background: #e8eaff;
+        color: #3548d4;
+    }
+
+    .stat-icon-green {
+        background: #e1f6ec;
+        color: #17875a;
+    }
+
+    .stat-icon-navy {
+        background: #eceefc;
+        color: #14173a;
+    }
+
+    .stat-value {
+        font-size: 30px;
+        font-weight: 800;
+        color: var(--text-primary);
+        line-height: 1.15;
+        margin-top: 10px;
+    }
+
+    .stat-bottom {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        margin-top: 14px;
+        gap: 10px;
+    }
+
+    .stat-sub {
+        font-size: 12px;
+        color: var(--text-muted);
+    }
+
+    .spark {
+        display: flex;
+        align-items: flex-end;
+        gap: 4px;
+        height: 32px;
+    }
+
+        .spark i {
+            display: block;
+            width: 4px;
+            border-radius: 3px;
+            background: #eceefa;
+            min-height: 4px;
+        }
+
+            .spark i.on-amber {
+                background: linear-gradient(180deg, #ffd28a, #e2a138);
+            }
+
+            .spark i.on-blue {
+                background: linear-gradient(180deg, #a5abf0, #3548d4);
+            }
+
+            .spark i.on-green {
+                background: linear-gradient(180deg, #7bd7ab, #17875a);
+            }
+
+            .spark i.on-navy {
+                background: linear-gradient(180deg, #6b7086, #14173a);
+            }
+
+    /* ---------- Overview grid ---------- */
+    .chart-grid {
+        display: grid;
+        grid-template-columns: 1.7fr 1fr;
+        gap: 18px;
+    }
+
+    @@media (max-width: 980px) {
+        .chart-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .chart-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 20px;
+        padding: 22px;
+        box-shadow: 0 1px 2px rgba(20, 23, 58, .04);
+        transition: background .25s ease, border-color .25s ease;
+    }
+
+    .chart-head {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 6px;
+    }
+
+        .chart-head h3 {
+            font-size: 15px;
+            font-weight: 700;
+            color: var(--text-primary);
+            margin: 0;
+        }
+
+    .chart-legend-top {
+        display: flex;
+        gap: 16px;
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-secondary);
+        margin-bottom: 18px;
+    }
+
+        .chart-legend-top span {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .chart-legend-top i {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            display: inline-block;
+        }
+
+    .bar-chart {
+        position: relative;
+        display: flex;
+        align-items: flex-end;
+        gap: 14px;
+        height: 210px;
+        padding-top: 12px;
+        overflow: hidden;
+        border-radius: 10px;
+    }
+
+    .bar-col {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        height: 100%;
+        justify-content: flex-end;
+        gap: 8px;
+    }
+
+    .bar-track {
+        width: 100%;
+        max-width: 38px;
+        height: 100%;
+        display: flex;
+        align-items: flex-end;
+        gap: 3px;
+    }
+
+    .bar-seg {
+        flex: 1;
+        display: flex;
+        align-items: flex-end;
+        background: linear-gradient(180deg, #f4f5fb, #eef0fa);
+        border-radius: 7px;
+        overflow: hidden;
+        height: 100%;
+    }
+
+        .bar-seg.total {
+            background: linear-gradient(180deg, #eef0fa, #e4e7fb);
+        }
+
+    .bar-fill-total {
+        width: 100%;
+        background: linear-gradient(180deg, #c7cbf7, #a5abf0);
+        border-radius: 7px;
+        min-height: 3px;
+        transition: height .6s ease;
+    }
+
+    .bar-fill-approved {
+        width: 100%;
+        background: linear-gradient(180deg, #818cf8, #4f46e5);
+        border-radius: 7px;
+        min-height: 3px;
+        transition: height .6s ease;
+    }
+
+    .bar-lbl {
+        font-size: 11px;
+        color: var(--text-muted);
+        font-weight: 600;
+    }
+
+        .bar-lbl.current {
+            color: #4f46e5;
+            font-weight: 800;
+        }
+
+    .scan-line {
+        position: absolute;
+        left: 8px;
+        right: 8px;
+        height: 2px;
+        top: 6%;
+        background: linear-gradient(90deg, transparent, #6366f1 20%, #a5b4fc 50%, #6366f1 80%, transparent);
+        box-shadow: 0 0 10px 1px rgba(99, 102, 241, .5);
+        border-radius: 2px;
+        pointer-events: none;
+        opacity: .85;
+        animation: dashScan 3.6s ease-in-out infinite;
+    }
+
+    @@keyframes dashScan {
+        0% {
+            top: 6%;
+            opacity: .35;
+        }
+
+        50% {
+            top: 88%;
+            opacity: .9;
+        }
+
+        100% {
+            top: 6%;
+            opacity: .35;
+        }
+    }
+
+    /* ---------- Approval progress side panel ---------- */
+    .progress-total {
+        font-size: 26px;
+        font-weight: 800;
+        color: var(--text-primary);
+        margin: 6px 0 16px;
+    }
+
+    .progress-bar {
+        display: flex;
+        height: 10px;
+        border-radius: 999px;
+        overflow: hidden;
+        background: var(--track-bg);
+        margin-bottom: 18px;
+    }
+
+    .progress-seg-approved {
+        background: #17875a;
+    }
+
+    .progress-seg-review {
+        background: #3548d4;
+    }
+
+    .progress-seg-pending {
+        background: #e2a138;
+    }
+
+    .progress-row {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        padding: 10px 0;
+        border-bottom: 1px solid var(--border-color);
+    }
+
+        .progress-row:last-of-type {
+            border-bottom: none;
+        }
+
+    .progress-row-label {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        font-size: 13px;
+        color: var(--text-secondary);
+        font-weight: 600;
+    }
+
+    .progress-row-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        display: inline-block;
+    }
+
+    .progress-row-value {
+        font-size: 14px;
+        font-weight: 800;
+        color: var(--text-primary);
+    }
+
+    .progress-total-row {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-top: 14px;
+        padding-top: 14px;
+        border-top: 1px solid var(--border-color);
+    }
+
+    .progress-total-label {
+        font-size: 12px;
+        color: var(--text-muted);
+        font-weight: 600;
+    }
+
+    .progress-total-value {
+        font-size: 18px;
+        font-weight: 800;
+        color: var(--text-primary);
+    }
+
+    /* ---------- Second row ---------- */
+    .row2-grid {
+        display: grid;
+        grid-template-columns: 1fr 1.4fr 1fr;
+        gap: 18px;
+    }
+
+    @@media (max-width: 1100px) {
+        .row2-grid {
+            grid-template-columns: 1fr;
+        }
+    }
+
+    .donut-wrap {
+        display: flex;
+        justify-content: center;
+        padding: 4px 0 6px;
+    }
+
+    .donut-num {
+        font-size: 22px;
+        font-weight: 800;
+        fill: var(--text-primary);
+    }
+
+    .donut-cap {
+        font-size: 10px;
+        fill: var(--text-muted);
+        font-weight: 600;
+    }
+
+    .status-legend {
+        margin-top: 8px;
+    }
+
+        .status-legend .progress-row-value {
+            font-size: 13px;
+        }
+
+    /* ---------- Recent sheets table ---------- */
+    .table-card {
+        padding: 0;
+        overflow: hidden;
+    }
+
+        .table-card .chart-head {
+            padding: 22px 22px 14px;
+            margin-bottom: 0;
+        }
+
+    table.sheets-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+        table.sheets-table th {
+            text-align: left;
+            font-size: 11px;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: .04em;
+            color: var(--text-muted);
+            padding: 10px 22px;
+            border-top: 1px solid var(--border-color);
+            border-bottom: 1px solid var(--border-color);
+            background: var(--header-bg);
+        }
+
+        table.sheets-table td {
+            padding: 14px 22px;
+            border-bottom: 1px solid var(--border-color);
+            font-size: 13px;
+            color: var(--text-secondary);
+        }
+
+        table.sheets-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        table.sheets-table tr.clickable {
+            cursor: pointer;
+            transition: background .15s ease;
+        }
+
+            table.sheets-table tr.clickable:hover {
+                background: var(--hover-bg);
+            }
+
+    .sheet-ref {
+        font-weight: 700;
+        color: #3548d4;
+    }
+
+    .sheet-cat {
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .empty-cell {
+        padding: 26px 22px;
+        color: var(--text-muted);
+        font-size: 13.5px;
+    }
+
+    .badge {
+        font-size: 11px;
+        font-weight: 700;
+        padding: 5px 12px;
+        border-radius: 999px;
+        white-space: nowrap;
+    }
+
+    .bg-success {
+        background: #e1f6ec;
+        color: #17875a;
+    }
+
+    .bg-warning {
+        background: #fff4e0;
+        color: #b26a00;
+    }
+
+    /* ---------- Upcoming actions ---------- */
+    .ua-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 0;
+        border-bottom: 1px solid var(--border-color);
+        cursor: pointer;
+        transition: background .15s ease;
+    }
+
+        .ua-row:last-child {
+            border-bottom: none;
+        }
+
+        .ua-row:hover {
+            background: var(--hover-bg);
+        }
+
+    .ua-dot {
+        width: 9px;
+        height: 9px;
+        border-radius: 50%;
+        flex-shrink: 0;
+    }
+
+    .ua-main {
+        flex: 1;
+        min-width: 0;
+    }
+
+    .ua-title {
+        font-size: 13px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .ua-sub {
+        font-size: 11.5px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+
+    /* ---------- Quick actions (stacked) ---------- */
+    .qa-stack {
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+    }
+
+    .qa-card {
+        background: var(--card-bg);
+        border: 1px solid var(--border-color);
+        border-radius: 16px;
+        padding: 18px;
+        text-decoration: none;
+        display: block;
+        transition: transform .2s ease, box-shadow .2s ease, border-color .2s ease, background .25s ease;
+        box-shadow: 0 1px 2px rgba(20, 23, 58, .04);
+    }
+
+        .qa-card:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 10px 26px rgba(20, 23, 58, .1);
+        }
+
+    .qa-row {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+    }
+
+    .qa-icon {
+        width: 36px;
+        height: 36px;
+        border-radius: 10px;
+        background: var(--track-bg);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+    }
+
+    .qa-dark {
+        background: #14173a;
+    }
+
+        .qa-dark .qa-icon {
+            background: rgba(255, 255, 255, .12);
+        }
+
+        .qa-dark .qa-title {
+            color: #fff;
+        }
+
+        .qa-dark .qa-desc {
+            color: #b7bbe0;
+        }
+
+    .qa-title {
+        font-size: 14px;
+        font-weight: 700;
+        color: var(--text-primary);
+    }
+
+    .qa-desc {
+        font-size: 12px;
+        color: var(--text-muted);
+        margin-top: 2px;
+    }
+</style>
+
+@{
+    var maxMonth = _monthly.Count == 0 ? 0 : _monthly.Max(m => m.Count);
+    var done = _approved;
+    var inProgress = Math.Max(0, _total - _approved);
+    var pendingCount = _pendingApproval;
+    var donutTotal = done + inProgress;
+    const double donutR = 52;
+    var donutCirc = 2 * Math.PI * donutR;
+    var approvedLen = donutTotal == 0 ? 0 : donutCirc * done / donutTotal;
+    string F(double v) => v.ToString("0.##", CultureInfo.InvariantCulture);
+
+    var progressDenom = Math.Max(1, done + _reviewsToResolve + pendingCount);
+    var approvedPct = done * 100.0 / progressDenom;
+    var reviewPct = _reviewsToResolve * 100.0 / progressDenom;
+    var pendingPct = pendingCount * 100.0 / progressDenom;
+    var alerts = _pendingApproval + _reviewsToResolve;
+}
+
+<div class="dash-wrap" data-theme="@(_isDark ? "dark" : "light")">
+
+    <div class="topbar">
+        <div class="topbar-left">
+            <div class="topbar-title">Dashboard</div>
+            <div class="topbar-date">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2"></rect><path d="M16 2v4M8 2v4M3 10h18"></path></svg>
+                @DateTime.Now.ToString("dd MMM yyyy")
+            </div>
+        </div>
+
+        <div class="topbar-search">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><path d="m21 21-4.3-4.3"></path></svg>
+            <input type="text" placeholder="Search anything..." @bind="_searchTerm" @bind:event="oninput" @onkeydown="HandleSearchKeyDown" />
+            <span class="kbd">⌘K</span>
+        </div>
+
+        <div class="topbar-right">
+            <button type="button" class="icon-btn" @onclick="ToggleTheme" title="Toggle theme">
+                @if (_isDark)
                 {
-                    <circle cx="70" cy="70" r="52" fill="none" stroke="#e2a138" stroke-width="16"></circle>
-                    <circle cx="70" cy="70" r="52" fill="none" stroke="#17875a" stroke-width="16"
-                            stroke-dasharray="@F(approvedLen) @F(circ - approvedLen)"
-                            stroke-linecap="round" transform="rotate(-90 70 70)"></circle>
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"></circle><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"></path></svg>
                 }
-                <text x="70" y="66" text-anchor="middle" class="donut-num">@_total</text>
-                <text x="70" y="86" text-anchor="middle" class="donut-cap">total sheets</text>
-            </svg>
-        </div>
-        <div class="chart-legend">
-            <span class="lg"><i style="background:#17875a"></i>Approved @done</span>
-            <span class="lg"><i style="background:#e2a138"></i>In progress @inProgress</span>
+                else
+                {
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"></path></svg>
+                }
+            </button>
+
+            <div class="notif-wrap">
+                <button type="button" class="icon-btn" title="Notifications" @onclick="ToggleNotifications">
+                    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8a6 6 0 0 1 12 0c0 5 2 6 2 6H4s2-1 2-6"></path><path d="M10 20a2 2 0 0 0 4 0"></path></svg>
+                    @if (alerts > 0)
+                    {
+                        <span class="dot-badge">@alerts</span>
+                    }
+                </button>
+
+                @if (_showNotifications)
+                {
+                    <div class="notif-panel">
+                        <div class="notif-head">Notifications</div>
+                        @if (_pendingSteps.Count == 0)
+                        {
+                            <div class="notif-empty">You're all caught up.</div>
+                        }
+                        else
+                        {
+                            @foreach (var step in _pendingSteps)
+                            {
+                                var isReview = step.Status == ApprovalStepStatus.Reviewed;
+                                <div class="notif-item" @onclick="() => GoToSheet(step)">
+                                    <div class="notif-title">@(isReview ? "Review sent back to you" : "Awaiting your approval")</div>
+                                    <div class="notif-sub">@(step.MinuteSheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial") sheet · @step.MinuteSheet.CreatedAt.ToLocalTime().ToString("dd MMM")</div>
+                                </div>
+                            }
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="user-chip">
+                <div class="avatar">@(_firstName.Length > 0 ? _firstName.Substring(0, 1).ToUpper() : "U")</div>
+                <div>
+                    <div class="user-name">@_firstName</div>
+                    <div class="user-role">Member</div>
+                </div>
+            </div>
         </div>
     </div>
 
-    <div class="chart-card">
-        <div class="chart-head">Activity · last 6 months</div>
-        @{
-            var maxMonth = _monthly.Count == 0 ? 0 : _monthly.Max(m => m.Count);
+    <div class="dash-header">
+        <div>
+            <div class="dash-greeting-title">@Greeting, @_firstName</div>
+            <div class="dash-greeting-sub">@DateTime.Now.ToString("dddd, dd MMMM") · here's what's happening with your minute sheets.</div>
+        </div>
+    </div>
+
+    <div class="stat-grid">
+        <div class="stat-card">
+            <div class="stat-top">
+                <div class="stat-label">Pending your approval</div>
+                <div class="stat-icon stat-icon-amber">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.2 2"></path></svg>
+                </div>
+            </div>
+            <div class="stat-value">@_pendingApproval</div>
+            <div class="stat-bottom">
+                <div class="stat-sub">awaiting your action</div>
+                <div class="spark">
+                    @foreach (var m in _monthly)
+                    {
+                        var h = maxMonth == 0 ? 8 : Math.Max(4, (int)Math.Round(m.Count * 30.0 / maxMonth));
+                        <i class="@(m.Count > 0 ? "on-amber" : "")" style="height:@(h)px"></i>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-top">
+                <div class="stat-label">Reviews to resolve</div>
+                <div class="stat-icon stat-icon-blue">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.6-6.36"></path><path d="M21 4v5h-5"></path></svg>
+                </div>
+            </div>
+            <div class="stat-value">@_reviewsToResolve</div>
+            <div class="stat-bottom">
+                <div class="stat-sub">sent back to you</div>
+                <div class="spark">
+                    @foreach (var m in _monthly)
+                    {
+                        var h = maxMonth == 0 ? 8 : Math.Max(4, (int)Math.Round(m.Count * 30.0 / maxMonth));
+                        <i class="@(m.Count > 0 ? "on-blue" : "")" style="height:@(h)px"></i>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-top">
+                <div class="stat-label">Approved</div>
+                <div class="stat-icon stat-icon-green">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M8.5 12.5l2.3 2.3L16 9.7"></path></svg>
+                </div>
+            </div>
+            <div class="stat-value">@_approved</div>
+            <div class="stat-bottom">
+                <div class="stat-sub">of your sheets</div>
+                <div class="spark">
+                    @foreach (var m in _monthly)
+                    {
+                        var h = maxMonth == 0 ? 8 : Math.Max(4, (int)Math.Round(m.Count * 30.0 / maxMonth));
+                        <i class="@(m.Count > 0 ? "on-green" : "")" style="height:@(h)px"></i>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <div class="stat-card">
+            <div class="stat-top">
+                <div class="stat-label">Total sheets</div>
+                <div class="stat-icon stat-icon-navy">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z"></path><path d="M14 3v5h5"></path><path d="M9 13h6M9 17h6"></path></svg>
+                </div>
+            </div>
+            <div class="stat-value">@_total</div>
+            <div class="stat-bottom">
+                <div class="stat-sub">you've created</div>
+                <div class="spark">
+                    @foreach (var m in _monthly)
+                    {
+                        var h = maxMonth == 0 ? 8 : Math.Max(4, (int)Math.Round(m.Count * 30.0 / maxMonth));
+                        <i class="@(m.Count > 0 ? "on-navy" : "")" style="height:@(h)px"></i>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-title">Overview</div>
+    <div class="chart-grid">
+
+        <div class="chart-card">
+            <div class="chart-head"><h3>Sheets Overview</h3></div>
+            <div class="chart-legend-top">
+                <span><i style="background:#a5abf0"></i>Total sheets</span>
+                <span><i style="background:#4f46e5"></i>Approved</span>
+            </div>
+            <div class="bar-chart">
+                <div class="scan-line"></div>
+                @{
+                    var currentMonthLabel = DateTime.Now.ToString("MMM");
+                }
+                @foreach (var m in _monthly)
+                {
+                    var totalH = maxMonth == 0 ? 0 : (int)Math.Round(m.Count * 100.0 / maxMonth);
+                    var approvedForMonth = _monthlyApproved.FirstOrDefault(x => x.Label == m.Label).Count;
+                    var approvedH = maxMonth == 0 ? 0 : (int)Math.Round(approvedForMonth * 100.0 / maxMonth);
+                    <div class="bar-col">
+                        <div class="bar-track">
+                            <div class="bar-seg total"><div class="bar-fill-total" style="height:@(totalH)%"></div></div>
+                            <div class="bar-seg"><div class="bar-fill-approved" style="height:@(approvedH)%"></div></div>
+                        </div>
+                        <div class="bar-lbl @(m.Label == currentMonthLabel ? "current" : "")">@m.Label</div>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="chart-card">
+            <div class="chart-head"><h3>Approval progress</h3></div>
+            <div class="progress-total">@_total <span style="font-size:13px;color:#9296ab;font-weight:600;">total sheets</span></div>
+            <div class="progress-bar">
+                <div class="progress-seg-approved" style="width:@(F(approvedPct))%"></div>
+                <div class="progress-seg-review" style="width:@(F(reviewPct))%"></div>
+                <div class="progress-seg-pending" style="width:@(F(pendingPct))%"></div>
+            </div>
+
+            <div class="progress-row">
+                <div class="progress-row-label"><span class="progress-row-dot" style="background:#17875a"></span>Approved</div>
+                <div class="progress-row-value">@done</div>
+            </div>
+            <div class="progress-row">
+                <div class="progress-row-label"><span class="progress-row-dot" style="background:#3548d4"></span>Reviews to resolve</div>
+                <div class="progress-row-value">@_reviewsToResolve</div>
+            </div>
+            <div class="progress-row">
+                <div class="progress-row-label"><span class="progress-row-dot" style="background:#e2a138"></span>Pending your approval</div>
+                <div class="progress-row-value">@pendingCount</div>
+            </div>
+
+            <div class="progress-total-row">
+                <div class="progress-total-label">Total sheets created</div>
+                <div class="progress-total-value">@_total</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="section-title">
+        <span>My upcoming actions</span>
+        <a class="section-link" href="dashboard/actions">View all</a>
+    </div>
+    <div class="chart-card" style="padding:6px 22px;">
+        @if (_pendingSteps.Count == 0)
+        {
+            <div class="empty-cell">Nothing waiting on you right now.</div>
         }
-        <div class="bar-chart">
-            @foreach (var m in _monthly)
+        else
+        {
+            @foreach (var step in _pendingSteps.Take(4))
             {
-                var h = maxMonth == 0 ? 0 : (int)Math.Round(m.Count * 100.0 / maxMonth);
-                <div class="bar-col">
-                    <div class="bar-val">@(m.Count > 0 ? m.Count.ToString() : "")</div>
-                    <div class="bar-track"><div class="bar-fill" style="height:@(h)%"></div></div>
-                    <div class="bar-lbl">@m.Label</div>
+                var isReview = step.Status == ApprovalStepStatus.Reviewed;
+                <div class="ua-row" @onclick="() => GoToSheet(step)">
+                    <span class="ua-dot" style="background:@(isReview ? "#3548d4" : "#e2a138")"></span>
+                    <div class="ua-main">
+                        <div class="ua-title">@(isReview ? "Review" : "Approve") · @(step.MinuteSheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
+                        <div class="ua-sub">Created @step.MinuteSheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")</div>
+                    </div>
+                    <span class="badge bg-warning">@(isReview ? "Needs review" : "Pending")</span>
                 </div>
             }
+        }
+    </div>
+
+    <div class="section-title">Status & activity</div>
+    <div class="row2-grid">
+
+        <div class="chart-card">
+            <div class="chart-head"><h3>Status breakdown</h3></div>
+            <div class="donut-wrap">
+                <svg viewBox="0 0 140 140" width="150" height="150">
+                    <circle cx="70" cy="70" r="52" fill="none" stroke="#eef0f6" stroke-width="16"></circle>
+                    @if (donutTotal > 0)
+                    {
+                        <circle cx="70" cy="70" r="52" fill="none" stroke="#e2a138" stroke-width="16"></circle>
+                        <circle cx="70" cy="70" r="52" fill="none" stroke="#17875a" stroke-width="16"
+                                stroke-dasharray="@F(approvedLen) @F(donutCirc - approvedLen)"
+                                stroke-linecap="round" transform="rotate(-90 70 70)"></circle>
+                    }
+                    <text x="70" y="66" text-anchor="middle" class="donut-num">@_total</text>
+                    <text x="70" y="86" text-anchor="middle" class="donut-cap">total sheets</text>
+                </svg>
+            </div>
+            <div class="status-legend">
+                <div class="progress-row">
+                    <div class="progress-row-label"><span class="progress-row-dot" style="background:#17875a"></span>Approved</div>
+                    <div class="progress-row-value">@done</div>
+                </div>
+                <div class="progress-row">
+                    <div class="progress-row-label"><span class="progress-row-dot" style="background:#e2a138"></span>In progress</div>
+                    <div class="progress-row-value">@inProgress</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="chart-card table-card">
+            <div class="chart-head"><h3>Recent sheets</h3></div>
+            <table class="sheets-table">
+                <thead>
+                    <tr>
+                        <th>Ref</th>
+                        <th>Category</th>
+                        <th>Date</th>
+                        <th>Progress</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @if (_recent.Count == 0)
+                    {
+                        <tr><td colspan="5" class="empty-cell">No minute sheets yet. Create your first one.</td></tr>
+                    }
+                    else
+                    {
+                        @for (var i = 0; i < _recent.Count; i++)
+                        {
+                            var sheet = _recent[i];
+                            var status = ApprovalWorkflow.StatusFor(sheet);
+                            var approvedSteps = ApprovalWorkflow.ApprovedCount(sheet.ApprovalSteps);
+                            <tr class="clickable" @onclick='() => Nav.NavigateTo($"dashboard/sheet/{sheet.Token}")'>
+                                <td class="sheet-ref">#@((i + 1).ToString("D3"))</td>
+                                <td class="sheet-cat">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</td>
+                                <td>@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")</td>
+                                <td>@approvedSteps / @sheet.ApprovalSteps.Count approved</td>
+                                <td><span class="badge @(status == "Approved" ? "bg-success" : "bg-warning")">@status</span></td>
+                            </tr>
+                        }
+                    }
+                </tbody>
+            </table>
+        </div>
+
+        <div class="qa-stack">
+            <a class="qa-card qa-dark" href="dashboard/create">
+                <div class="qa-row">
+                    <div class="qa-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></div>
+                    <div>
+                        <div class="qa-title">Create a new sheet</div>
+                        <div class="qa-desc">Description, attachment & workflow</div>
+                    </div>
+                </div>
+            </a>
+            <a class="qa-card" href="dashboard/history">
+                <div class="qa-row">
+                    <div class="qa-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3548d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg></div>
+                    <div>
+                        <div class="qa-title">View history</div>
+                        <div class="qa-desc">Your submitted sheets & progress</div>
+                    </div>
+                </div>
+            </a>
+            <a class="qa-card" href="dashboard/actions">
+                <div class="qa-row">
+                    <div class="qa-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3548d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"></path><circle cx="12" cy="12" r="9"></circle></svg></div>
+                    <div>
+                        <div class="qa-title">Actions</div>
+                        <div class="qa-desc">Sheets waiting on your review</div>
+                    </div>
+                </div>
+            </a>
         </div>
     </div>
-</div>
 
-<div class="section-title">Quick actions</div>
-<div class="qa-grid">
-    <a class="qa-card qa-dark" href="dashboard/create">
-        <div class="qa-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M12 5v14M5 12h14"></path></svg></div>
-        <div class="qa-title">Create a new sheet</div>
-        <div class="qa-desc">Start a minute sheet with description, attachment and approval workflow.</div>
-    </a>
-    <a class="qa-card" href="dashboard/history">
-        <div class="qa-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3548d4" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg></div>
-        <div class="qa-title">View history</div>
-        <div class="qa-desc">Browse minute sheets you've submitted and their approval progress.</div>
-    </a>
-    <a class="qa-card" href="dashboard/actions">
-        <div class="qa-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#3548d4" stroke-width="2"><path d="M9 12l2 2 4-4"></path><circle cx="12" cy="12" r="9"></circle></svg></div>
-        <div class="qa-title">Actions</div>
-        <div class="qa-desc">Sheets waiting on your review, approval, or resolution.</div>
-    </a>
-</div>
-
-<div class="section-title">Recent activity</div>
-<div class="activity-card">
-    @if (_recent.Count == 0)
-    {
-        <div style="padding:22px;color:#9296ab;font-size:14px;">No minute sheets yet. Create your first one.</div>
-    }
-    else
-    {
-        @foreach (var sheet in _recent)
-        {
-            var status = ApprovalWorkflow.StatusFor(sheet);
-            <a class="activity-row" href="dashboard/sheet/@sheet.Token">
-                <div style="flex:1;min-width:0;">
-                    <div class="activity-title">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial") minute sheet</div>
-                    <div class="activity-meta">@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm") · @ApprovalWorkflow.ApprovedCount(sheet.ApprovalSteps) / @sheet.ApprovalSteps.Count approved</div>
-                </div>
-                <span class="badge @(status == "Approved" ? "bg-success" : "bg-warning")">@status</span>
-            </a>
-        }
-    }
 </div>
 
 @code {
     private string _firstName = "there";
+    private string _searchTerm = "";
+    private bool _isDark;
+    private bool _showNotifications;
     private int _pendingApproval;
     private int _reviewsToResolve;
     private int _approved;
     private int _total;
     private List<MinuteSheet> _recent = new();
+    private List<ApprovalStep> _pendingSteps = new();
     private List<(string Label, int Count)> _monthly = new();
+    private List<(string Label, int Count)> _monthlyApproved = new();
 
     private string Greeting => DateTime.Now.Hour switch
     {
@@ -169,6 +1308,17 @@
         _pendingApproval = await DbContext.ApprovalSteps
             .CountAsync(s => s.ApproverEmail == email && s.Status != ApprovalStepStatus.Approved);
 
+        // Real data for the notification dropdown / "My upcoming actions" widget.
+        // NOTE: this assumes ApprovalStep has a navigation property called "MinuteSheet"
+        // pointing back to its parent sheet. If your entity uses a different name
+        // (e.g. "Sheet"), rename it below in both the Include(...) and OrderByDescending(...).
+        _pendingSteps = await DbContext.ApprovalSteps
+            .Where(s => s.ApproverEmail == email && s.Status != ApprovalStepStatus.Approved)
+            .Include(s => s.MinuteSheet)
+            .OrderByDescending(s => s.MinuteSheet.CreatedAt)
+            .Take(6)
+            .ToListAsync();
+
         var mySheets = await DbContext.MinuteSheets
             .Where(m => m.CreatedByUserId == user.Id)
             .Include(m => m.ApprovalSteps)
@@ -180,7 +1330,6 @@
         _reviewsToResolve = mySheets.Count(m => m.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed));
         _recent = mySheets.Take(5).ToList();
 
-        // Sheets created per month over the trailing 6-month window (oldest first).
         var firstOfThisMonth = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1);
         for (var i = 5; i >= 0; i--)
         {
@@ -190,7 +1339,74 @@
                 var d = m.CreatedAt.ToLocalTime();
                 return d.Year == month.Year && d.Month == month.Month;
             });
+            var approvedCount = mySheets.Count(m =>
+            {
+                var d = m.CreatedAt.ToLocalTime();
+                return d.Year == month.Year && d.Month == month.Month && ApprovalWorkflow.IsFullyApproved(m.ApprovalSteps);
+            });
             _monthly.Add((month.ToString("MMM"), count));
+            _monthlyApproved.Add((month.ToString("MMM"), approvedCount));
         }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            try
+            {
+                var saved = await JS.InvokeAsync<string?>("localStorage.getItem", "ms-theme");
+                _isDark = saved == "dark";
+                StateHasChanged();
+            }
+            catch
+            {
+                // localStorage not available (e.g. prerender) — default to light.
+            }
+        }
+    }
+
+    private async Task ToggleTheme()
+    {
+        _isDark = !_isDark;
+        try
+        {
+            await JS.InvokeVoidAsync("localStorage.setItem", "ms-theme", _isDark ? "dark" : "light");
+        }
+        catch
+        {
+            // ignore if storage unavailable
+        }
+    }
+
+    private void ToggleNotifications()
+    {
+        _showNotifications = !_showNotifications;
+    }
+
+    private void GoToSheet(ApprovalStep step)
+    {
+        _showNotifications = false;
+        Nav.NavigateTo($"dashboard/sheet/{step.MinuteSheet.Token}");
+    }
+
+    // Simple keyword-based navigation for the search box.
+    // Press Enter after typing "history", "create", "actions", etc.
+    private void HandleSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key != "Enter") return;
+
+        var term = _searchTerm.Trim().ToLowerInvariant();
+        if (string.IsNullOrEmpty(term)) return;
+
+        if (term.Contains("histor"))
+            Nav.NavigateTo("dashboard/history");
+        else if (term.Contains("creat") || term.Contains("new sheet"))
+            Nav.NavigateTo("dashboard/create");
+        else if (term.Contains("action") || term.Contains("review") || term.Contains("approv"))
+            Nav.NavigateTo("dashboard/actions");
+        else if (term.Contains("dashboard") || term.Contains("home"))
+            Nav.NavigateTo("dashboard");
+        // No match: extend this later with a real full-text search across sheets if needed.
     }
 }
