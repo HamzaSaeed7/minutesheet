@@ -69,6 +69,10 @@ else
             {
                 <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="DeleteSheet">Delete</button>
             }
+            @if (_sheet.IsConfidential)
+            {
+                <span class="badge bg-danger" style="font-size:13px;padding:6px 16px;" title="Only the creator, listed approvers and admins can view this sheet.">Confidential</span>
+            }
             <span class="badge @SheetStatusClass(_currentStatus)" style="font-size:13px;padding:6px 16px;">@_currentStatus</span>
         </div>
 
@@ -280,9 +284,9 @@ else
                                   || _sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed));
         var myEmail = _me.Email ?? "";
         var isApprover = _sheet.ApprovalSteps.Any(s => string.Equals(s.ApproverEmail, myEmail, StringComparison.OrdinalIgnoreCase));
-        // Admins have read access to every sheet; edit/approve/delete stay tied to
-        // being the creator or a designated approver.
-        _canView = _isCreator || isApprover || _isAdmin;
+        // Non-confidential sheets are visible to every user. Confidential sheets
+        // are restricted to the creator, listed approvers and admins.
+        _canView = !_sheet.IsConfidential || _isCreator || isApprover || _isAdmin;
 
         _currentStatus = ApprovalWorkflow.StatusFor(_sheet);
 

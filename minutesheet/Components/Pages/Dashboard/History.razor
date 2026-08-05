@@ -21,6 +21,10 @@
 <h1 class="page-title">Minute Sheet History</h1>
 
 <ToastHost />
+<div class="seg-tabs" style="margin-bottom:18px;">
+    <button type="button" class="seg-tab @(!_showPublic ? "active" : "")" @onclick="() => SetView(false)">Private</button>
+    <button type="button" class="seg-tab @(_showPublic ? "active" : "")" @onclick="() => SetView(true)">Public</button>
+</div>
 
 <div class="content-card" style="max-width:none">
     @if (_sheets is null)
@@ -29,7 +33,7 @@
     }
     else if (_sheets.Count == 0)
     {
-        <p class="text-muted mb-0">You haven't submitted any minute sheets yet.</p>
+        <p class="text-muted mb-0">@(_showPublic ? "No public minute sheets available yet." : "You haven't submitted or been assigned to any minute sheets yet.")</p>
     }
     else
     {
@@ -37,6 +41,10 @@
             <thead>
                 <tr>
                     <th>Date</th>
+                    @if (_showPublic)
+                    {
+                        <th>Created by</th>
+                    }
                     <th>Category</th>
                     <th>Status</th>
                     <th>Approvals</th>
@@ -48,9 +56,20 @@
                 @foreach (var sheet in _sheets)
                 {
                     var status = ApprovalWorkflow.StatusFor(sheet);
+                    var mine = sheet.CreatedByUserId == _userId;
                     <tr>
                         <td>@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</td>
-                        <td>@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</td>
+                        @if (_showPublic)
+                        {
+                            <td>@(string.IsNullOrWhiteSpace(sheet.CreatedByUser?.FullName) ? sheet.CreatedByUser?.Email : sheet.CreatedByUser!.FullName)</td>
+                        }
+                        <td>
+                            @(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")
+                            @if (sheet.IsConfidential)
+                            {
+                                <span class="badge bg-danger" style="margin-left:6px;" title="Only the creator, listed approvers and admins can view this sheet.">Confidential</span>
+                            }
+                        </td>
                         <td><span class="badge @(status == "Approved" ? "bg-success" : "bg-warning")">@status</span></td>
                         <td>
                             @{
@@ -75,13 +94,16 @@
                         </td>
                         <td>
                             <div class="d-flex gap-2 justify-content-end">
-                                @if (sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending)
-                                     || sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed))
+                                @if (mine && (sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending)
+                                     || sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed)))
                                 {
                                     <a class="btn btn-sm btn-outline-secondary" href="dashboard/sheet/@sheet.Token/edit">Edit</a>
                                 }
                                 <a class="btn btn-sm btn-outline-primary" href="dashboard/sheet/@sheet.Token">Open</a>
-                                <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_busy" @onclick="() => DeleteSheet(sheet.Token)">Delete</button>
+                                @if (mine)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_busy" @onclick="() => DeleteSheet(sheet.Token)">Delete</button>
+                                }
                             </div>
                         </td>
                     </tr>
@@ -94,7 +116,9 @@
 @code {
     private List<MinuteSheet>? _sheets;
     private string? _userId;
+    private string _userEmail = "";
     private bool _busy;
+    private bool _showPublic;
 
     protected override async Task OnInitializedAsync()
     {
@@ -107,17 +131,42 @@
         }
 
         _userId = user.Id;
+        _userEmail = user.Email ?? "";
+        await LoadAsync();
+    }
+
+    private async Task SetView(bool showPublic)
+    {
+        _showPublic = showPublic;
         await LoadAsync();
     }
 
     private async Task LoadAsync()
     {
-        _sheets = await DbContext.MinuteSheets
-            .AsNoTracking()
-            .Where(m => m.CreatedByUserId == _userId)
-            .Include(m => m.ApprovalSteps)
-            .OrderByDescending(m => m.CreatedAt)
-            .ToListAsync();
+        if (_showPublic)
+        {
+            // Public view: every user can browse all non-confidential sheets.
+            _sheets = await DbContext.MinuteSheets
+                .AsNoTracking()
+                .Where(m => !m.IsConfidential)
+                .Include(m => m.CreatedByUser)
+                .Include(m => m.ApprovalSteps)
+                .OrderByDescending(m => m.CreatedAt)
+                .ToListAsync();
+        }
+        else
+        {
+            // Private view: sheets the current user created plus confidential
+            // sheets where they're a listed approver (so approvers can reach
+            // sheets they're involved in from history, not just Actions).
+            _sheets = await DbContext.MinuteSheets
+                .AsNoTracking()
+                .Where(m => m.CreatedByUserId == _userId
+                            || (m.IsConfidential && m.ApprovalSteps.Any(s => s.ApproverEmail == _userEmail)))
+                .Include(m => m.ApprovalSteps)
+                .OrderByDescending(m => m.CreatedAt)
+                .ToListAsync();
+        }
     }
 
     private async Task DeleteSheet(Guid token)

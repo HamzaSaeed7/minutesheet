@@ -96,9 +96,10 @@ public class DocumentSummarizationService
     private async Task<string> SummarizeAsync(string documentText)
     {
         var apiKey = _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"];
-        if (string.IsNullOrEmpty(apiKey))
+        if (string.IsNullOrWhiteSpace(apiKey))
         {
-            return "Error: AI API Key is not configured.";
+            _logger.LogError("AI API Key is not configured in OpenRouterSettings:ApiKey.");
+            return "Error: AI API Key is not configured. Please add it to your user secrets.";
         }
 
         var url = "https://openrouter.ai/api/v1/chat/completions";
