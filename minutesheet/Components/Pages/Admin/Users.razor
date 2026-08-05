@@ -56,24 +56,27 @@
                             </span>
                         </td>
                         <td class="text-end">
-                            @if (row.IsSelf)
-                            {
-                                <span class="text-muted" style="font-size:12.5px;">You</span>
-                            }
-                            else if (row.IsAdmin)
-                            {
-                                <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_busy"
-                                        @onclick="() => SetRole(row, makeAdmin: false)">
-                                    Make Employee
-                                </button>
-                            }
-                            else
-                            {
-                                <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_busy"
-                                        @onclick="() => SetRole(row, makeAdmin: true)">
-                                    Make Admin
-                                </button>
-                            }
+                            <div class="d-inline-flex align-items-center gap-2">
+                                <a class="btn btn-sm btn-outline-secondary" href="@($"admin/users/{row.User.Id}/edit")">Edit</a>
+                                @if (row.IsSelf)
+                                {
+                                    <span class="text-muted" style="font-size:12.5px;">You</span>
+                                }
+                                else if (row.IsAdmin)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_busy"
+                                            @onclick="() => SetRole(row, makeAdmin: false)">
+                                        Make Employee
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_busy"
+                                            @onclick="() => SetRole(row, makeAdmin: true)">
+                                        Make Admin
+                                    </button>
+                                }
+                            </div>
                         </td>
                     </tr>
                 }

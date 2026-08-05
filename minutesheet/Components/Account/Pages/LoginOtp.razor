@@ -1,0 +1,131 @@
+@page "/Account/LoginOtp"
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Identity
+@using minutesheet.Components.Account
+@using minutesheet.Data
+
+@inject UserManager<ApplicationUser> UserManager
+@inject SignInManager<ApplicationUser> SignInManager
+@inject SmtpEmailSender EmailSender
+@inject ILogger<LoginOtp> Logger
+@inject IdentityRedirectManager RedirectManager
+
+<PageTitle>Verify login</PageTitle>
+
+<h1 class="auth-title">Check your email</h1>
+<p class="auth-subtitle">We sent a 6-digit code to <strong>@Email</strong>. Enter it below to finish logging in.</p>
+
+<StatusMessage Message="@Message" />
+
+<EditForm Model="Input" method="post" OnValidSubmit="VerifyCode" FormName="verify-login-otp">
+    <DataAnnotationsValidator />
+    <ValidationSummary class="text-danger" role="alert" />
+
+    <div class="form-floating mb-3">
+        <InputText @bind-Value="Input.Code" class="form-control otp-input" autocomplete="one-time-code"
+                   inputmode="numeric" maxlength="6" aria-required="true" placeholder="000000" />
+        <label>Verification code</label>
+        <ValidationMessage For="() => Input.Code" class="text-danger" />
+    </div>
+
+    <button type="submit" class="w-100 btn btn-lg btn-primary">Verify &amp; continue</button>
+</EditForm>
+
+<EditForm Model="Resend" method="post" OnValidSubmit="ResendCode" FormName="resend-login-otp" class="mt-2">
+    <button type="submit" class="w-100 btn btn-link">Resend code</button>
+</EditForm>
+
+<p class="auth-footer">
+    <a href="Account/Login">Back to login</a>
+</p>
+
+@code {
+    private const string Purpose = "login-otp";
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private InputModel _input = new();
+    [SupplyParameterFromForm(FormName = "verify-login-otp")]
+    private InputModel Input { get => _input; set => _input = value ?? new(); }
+
+    private ResendModel _resend = new();
+    [SupplyParameterFromForm(FormName = "resend-login-otp")]
+    private ResendModel Resend { get => _resend; set => _resend = value ?? new(); }
+
+    [SupplyParameterFromQuery]
+    private string? Email { get; set; }
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery]
+    private bool RememberMe { get; set; }
+
+    private string? Message { get; set; }
+
+    private async Task<ApplicationUser?> ResolveUserAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Email))
+        {
+            RedirectManager.RedirectTo("Account/Login");
+        }
+
+        var user = await UserManager.FindByEmailAsync(Email!);
+        if (user is null)
+        {
+            Message = "Error: We couldn't find an account for that email.";
+        }
+        return user;
+    }
+
+    private async Task VerifyCode()
+    {
+        var user = await ResolveUserAsync();
+        if (user is null)
+        {
+            return;
+        }
+
+        var valid = await UserManager.VerifyUserTokenAsync(
+            user, TokenOptions.DefaultEmailProvider, Purpose, Input.Code.Trim());
+
+        if (!valid)
+        {
+            Message = "Error: That code is invalid or has expired. Request a new one.";
+            return;
+        }
+
+        Logger.LogInformation("User {Email} completed login OTP verification.", Email);
+        await SignInManager.SignInAsync(user, isPersistent: RememberMe);
+        RedirectManager.RedirectToWithStatus(ReturnUrl ?? "", "You're logged in. Welcome back!", HttpContext);
+    }
+
+    private async Task ResendCode()
+    {
+        var user = await ResolveUserAsync();
+        if (user is null)
+        {
+            return;
+        }
+
+        var code = await UserManager.GenerateUserTokenAsync(user, TokenOptions.DefaultEmailProvider, Purpose);
+        var sent = await EmailSender.SendOtpAsync(Email!, code);
+        Message = sent
+            ? "A new verification code has been sent to your email."
+            : "Error: We couldn't send the email right now. Please try again in a moment.";
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [RegularExpression(@"^\d{6}$", ErrorMessage = "Enter the 6-digit code.")]
+        [Display(Name = "Verification code")]
+        public string Code { get; set; } = "";
+    }
+
+    private sealed class ResendModel
+    {
+    }
+}
