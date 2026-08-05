@@ -12,10 +12,6 @@ else
         <div class="auth-overlay"></div>
         <div class="auth-glow"></div>
 
-        <div class="auth-splash-logo" id="authSplashLogo">
-            <img src="images/FFC-Logo-Blue-V3.webp" alt="FFC" />
-        </div>
-
         <div class="auth-wrap">
             <div class="auth-brand">
                 <div class="auth-brand-head">
@@ -77,30 +73,7 @@ else
                 }
             }
 
-            // Wait for the splash reveal, then start "writing" the tagline.
-            setTimeout(tick, 1700);
-
-            // Splash logo: stays centered, then glides to its spot in the brand
-            // header as the page content reveals.
-            var splashLogo = document.getElementById('authSplashLogo');
-            var headerLogoBox = document.querySelector('.auth-brand-head .auth-logo-box');
-            if (splashLogo && headerLogoBox) {
-                setTimeout(function () {
-                    var from = splashLogo.getBoundingClientRect();
-                    var to = headerLogoBox.getBoundingClientRect();
-                    var dx = to.left + to.width / 2 - (from.left + from.width / 2);
-                    var dy = to.top + to.height / 2 - (from.top + from.height / 2);
-                    var scale = to.width / from.width;
-                    var D = 900;
-                    splashLogo.style.transition = 'transform ' + D + 'ms cubic-bezier(.4,0,.2,1), opacity ' + (D * 0.75) + 'ms ease';
-                    // Force a reflow so the browser registers the transition on the
-                    // centered state before the transform changes (smooth glide).
-                    void splashLogo.offsetWidth;
-                    splashLogo.style.transform = 'translate(-50%, -50%) translate(' + dx + 'px,' + dy + 'px) scale(' + scale + ')';
-                    splashLogo.style.opacity = '0';
-                    setTimeout(function () { splashLogo.style.display = 'none'; }, D + 120);
-                }, 1500);
-            }
+            setTimeout(tick, 300);
         })();
     </script>
 }
