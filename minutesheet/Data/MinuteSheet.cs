@@ -21,6 +21,9 @@ namespace minutesheet.Data
         [MaxLength(400)]
         public string? AttachmentStoredPath { get; set; }
 
+        // When true, only the creator, listed approvers and admins can view the sheet.
+        public bool IsConfidential { get; set; }
+
         [Required]
         public string CreatedByUserId { get; set; } = "";
 
