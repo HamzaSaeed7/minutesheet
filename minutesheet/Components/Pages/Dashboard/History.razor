@@ -14,11 +14,13 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject IWebHostEnvironment Env
 @inject IJSRuntime JS
+@inject minutesheet.Services.ToastService ToastService
 
 <PageTitle>History</PageTitle>
 
 <h1 class="page-title">Minute Sheet History</h1>
 
+<ToastHost />
 <div class="seg-tabs" style="margin-bottom:18px;">
     <button type="button" class="seg-tab @(!_showPublic ? "active" : "")" @onclick="() => SetView(false)">Private</button>
     <button type="button" class="seg-tab @(_showPublic ? "active" : "")" @onclick="() => SetView(true)">Public</button>
@@ -195,6 +197,7 @@
             }
 
             await LoadAsync();
+            ToastService.ShowSuccess("The minute sheet was deleted permanently.", "Sheet deleted");
         }
 
         _busy = false;

@@ -27,7 +27,7 @@ window.quillInterop = (function () {
         }
         const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
         activeRecognition = new SpeechRecognition();
-        
+
         activeRecognition.lang = language;
         activeRecognition.interimResults = false;
         activeRecognition.continuous = true;
@@ -37,7 +37,7 @@ window.quillInterop = (function () {
         activeQuill = quillInstance;
         sessionTranscript = '';
         sessionLength = 0;
-        
+
         const range = quillInstance.getSelection(true);
         sessionStartIndex = range ? range.index : quillInstance.getLength();
 
@@ -51,12 +51,12 @@ window.quillInterop = (function () {
                 let latestResultIndex = event.results.length - 1;
                 let transcript = event.results[latestResultIndex][0].transcript;
                 let textToInsert = transcript + ' ';
-                
+
                 let insertPos = sessionStartIndex + sessionLength;
                 quillInstance.insertText(insertPos, textToInsert);
                 sessionLength += textToInsert.length;
                 quillInstance.setSelection(insertPos + textToInsert.length);
-                
+
                 sessionTranscript += textToInsert;
             }
         };
@@ -85,7 +85,7 @@ window.quillInterop = (function () {
             let cleanTranscript = sessionTranscript.trimEnd();
             let formattedText = formatNouns(cleanTranscript, activeLanguage);
             formattedText += ' ';
-            
+
             activeQuill.deleteText(sessionStartIndex, sessionLength);
             activeQuill.insertText(sessionStartIndex, formattedText);
             activeQuill.setSelection(sessionStartIndex + formattedText.length);
@@ -96,12 +96,12 @@ window.quillInterop = (function () {
 
     function formatNouns(text, language) {
         let lines = text.split('\n');
-        
+
         for (let i = 0; i < lines.length; i++) {
             if (i === 0 || i === 2) {
                 let targetText = lines[i].trim();
                 if (targetText.length === 0) continue;
-                
+
                 if (language === 'en-US' && typeof window.nlp !== 'undefined') {
                     let extractedNouns = window.nlp(targetText).nouns().out('array');
                     if (extractedNouns.length > 0) {
@@ -115,7 +115,7 @@ window.quillInterop = (function () {
                 }
             }
         }
-        
+
         return lines.join('\n');
     }
 
@@ -140,19 +140,8 @@ window.quillInterop = (function () {
                             [{ list: 'ordered' }, { list: 'bullet' }],
                             [{ indent: '-1' }, { indent: '+1' }],
                             ['link', 'blockquote'],
-                            ['clean'],
-                            ['dictateEn', 'dictateUr']
-                        ],
-                        handlers: {
-                            'dictateEn': function() {
-                                const btn = this.container.querySelector('.ql-dictateEn');
-                                toggleDictation('en-US', btn, quill);
-                            },
-                            'dictateUr': function() {
-                                const btn = this.container.querySelector('.ql-dictateUr');
-                                toggleDictation('ur-PK', btn, quill);
-                            }
-                        }
+                            ['clean']
+                        ]
                     }
                 }
             });
@@ -160,12 +149,6 @@ window.quillInterop = (function () {
                 quill.clipboard.dangerouslyPasteHTML(initialHtml);
             }
             editors[elementId] = quill;
-
-            const dictateEnBtn = quill.getModule('toolbar').container.querySelector('.ql-dictateEn');
-            if (dictateEnBtn) { dictateEnBtn.innerText = '🎙️ EN'; dictateEnBtn.title = 'Dictate English'; }
-            
-            const dictateUrBtn = quill.getModule('toolbar').container.querySelector('.ql-dictateUr');
-            if (dictateUrBtn) { dictateUrBtn.innerText = '🎤 UR'; dictateUrBtn.title = 'Dictate Urdu'; }
         },
 
         getHtml: function (elementId) {
@@ -180,81 +163,22 @@ window.quillInterop = (function () {
         },
 
         // Dictate into the editor via the browser's speech-recognition engine,
-        // or stop an in-progress session. Recognized phrases are inserted at the
-        // caret (or appended) as the user speaks.
-        toggleDictation: function (elementId, btn) {
-            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SR) {
-                alert('Speech recognition is not supported in this browser. Try Chrome or Edge.');
-                return;
-            }
-            // A second click stops the active session.
-            if (this._recognizer) {
-                this._recognizer.stop();
-                return;
-            }
+        // or stop an in-progress session. The optional `language` selects the
+        // recognition locale (e.g. 'en-US' or 'ur-PK').
+        toggleDictation: function (elementId, btn, language) {
             const quill = editors[elementId];
             if (!quill) {
                 return;
             }
-
-            const rec = new SR();
-            rec.lang = 'en-US';
-            rec.continuous = true;      // keep listening across pauses
-            rec.interimResults = false; // only commit finalized phrases
-            this._recognizer = rec;
-            this._setDictateBtn(btn, true);
-
-            rec.onresult = (e) => {
-                let phrase = '';
-                for (let i = e.resultIndex; i < e.results.length; i++) {
-                    if (e.results[i].isFinal) {
-                        phrase += e.results[i][0].transcript;
-                    }
-                }
-                phrase = phrase.trim();
-                if (!phrase) {
-                    return;
-                }
-                // Insert at the caret, falling back to the end of the document.
-                const sel = quill.getSelection();
-                let index = sel ? sel.index : Math.max(0, quill.getLength() - 1);
-                // Add a leading space if we're not at the start and there isn't
-                // already whitespace before the caret.
-                const prevChar = index > 0 ? quill.getText(index - 1, 1) : '';
-                if (prevChar && !/\s/.test(prevChar)) {
-                    phrase = ' ' + phrase;
-                }
-                quill.insertText(index, phrase, 'user');
-                quill.setSelection(index + phrase.length, 0);
-            };
-
-            rec.onerror = (e) => {
-                if (e.error === 'not-allowed' || e.error === 'service-not-allowed') {
-                    alert('Microphone access was blocked. Allow it in your browser to use dictation.');
-                }
-            };
-
-            rec.onend = () => {
-                this._recognizer = null;
-                this._setDictateBtn(btn, false);
-            };
-
-            rec.start();
-        },
-
-        _setDictateBtn: function (btn, active) {
-            if (!btn) return;
-            btn.classList.toggle('dictating', active);
-            const label = btn.querySelector('.dictate-label');
-            if (label) label.textContent = active ? 'Stop' : 'Dictate';
+            toggleDictation(language || 'en-US', btn, quill);
         },
 
         destroy: function (elementId) {
             // Stop any active dictation session when the editor goes away.
-            if (this._recognizer) {
-                try { this._recognizer.stop(); } catch (_) { }
-                this._recognizer = null;
+            if (activeRecognition) {
+                try { activeRecognition.stop(); } catch (_) { }
+                activeRecognition = null;
+                isRecording = false;
             }
             delete editors[elementId];
         }

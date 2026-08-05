@@ -1,0 +1,116 @@
+@inject minutesheet.Services.ToastService ToastService
+@using minutesheet.Services
+@using minutesheet.Components.Account
+
+<div class="ms-toast-viewport" aria-live="polite" aria-atomic="false">
+    @foreach (var toast in ToastService.Items)
+    {
+        <div class="ms-toast ms-toast-@toast.Type.ToString().ToLowerInvariant()" @key="toast.Id">
+            <div class="ms-toast-icon">
+                @Icon(toast.Type)
+            </div>
+            <div class="ms-toast-content">
+                @if (!string.IsNullOrEmpty(toast.Title))
+                {
+                    <div class="ms-toast-title">@toast.Title</div>
+                }
+                <div class="ms-toast-msg">@toast.Message</div>
+            </div>
+            <button type="button" class="ms-toast-close" aria-label="Dismiss" @onclick="() => ToastService.Remove(toast.Id)">✕</button>
+        </div>
+    }
+</div>
+
+@code {
+    private Timer? _timer;
+    private bool _disposed;
+
+    // Cascading HttpContext is null once a circuit is live (interactive mode).
+    // NOTE: this is only used to read the status cookie during static rendering;
+    // toasts always re-render via InvokeAsync regardless of HttpContext.
+    [CascadingParameter] private HttpContext? HttpContext { get; set; }
+
+    protected override void OnInitialized()
+    {
+        ToastService.OnChange += OnToastsChanged;
+
+        // During static (non-interactive) rendering, surface a message carried
+        // across a redirect by IdentityRedirectManager.RedirectToWithStatus, e.g.
+        // after login or account verification lands back on a dashboard page.
+        if (HttpContext is not null)
+        {
+            var raw = HttpContext.Request.Cookies[IdentityRedirectManager.StatusCookieName];
+            if (!string.IsNullOrEmpty(raw))
+            {
+                HttpContext.Response.Cookies.Delete(IdentityRedirectManager.StatusCookieName);
+                var toast = Parse(raw);
+                if (toast is not null)
+                {
+                    ToastService.Show(toast.Value.Type, toast.Value.Message);
+                }
+            }
+        }
+    }
+
+    protected override void OnAfterRender(bool firstRender)
+    {
+        if (firstRender && !_disposed)
+        {
+            _timer = new Timer(_ =>
+            {
+                try
+                {
+                    var cutoff = DateTimeOffset.UtcNow.AddSeconds(-ToastService.ToastDurationSeconds);
+                    foreach (var toast in ToastService.Items.Where(i => i.CreatedAt < cutoff))
+                    {
+                        ToastService.Remove(toast.Id);
+                    }
+                }
+                catch
+                {
+                    // Best-effort cleanup; never let the timer break rendering.
+                }
+            }, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+        }
+    }
+
+    private void OnToastsChanged()
+    {
+        if (_disposed)
+        {
+            return;
+        }
+
+        try
+        {
+            InvokeAsync(StateHasChanged);
+        }
+        catch (InvalidOperationException)
+        {
+            // Component is statically rendered / not attached to a live renderer,
+            // or has been disposed (ObjectDisposedException derives from this).
+        }
+    }
+
+    private static (ToastType Type, string Message)? Parse(string raw)
+    {
+        var isError = raw.StartsWith("Error", StringComparison.OrdinalIgnoreCase);
+        var text = isError && raw.Length > 6 ? raw[6..] : raw;
+        return (isError ? ToastType.Error : ToastType.Success, text);
+    }
+
+    private static string Icon(ToastType type) => type switch
+    {
+        ToastType.Success => "✓",
+        ToastType.Error => "✕",
+        ToastType.Warning => "!",
+        _ => "i"
+    };
+
+    public void Dispose()
+    {
+        _disposed = true;
+        _timer?.Dispose();
+        ToastService.OnChange -= OnToastsChanged;
+    }
+}

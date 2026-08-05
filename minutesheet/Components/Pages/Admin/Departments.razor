@@ -9,10 +9,13 @@
 
 @inject ApplicationDbContext DbContext
 @inject IJSRuntime JS
+@inject minutesheet.Services.ToastService ToastService
 
 <PageTitle>Manage Departments</PageTitle>
 
 <h1 class="page-title">Manage Departments</h1>
+
+<ToastHost />
 
 <div class="content-card">
     <div class="d-flex gap-2 mb-3">
@@ -108,7 +111,7 @@
 
         if (await DbContext.Departments.AnyAsync(d => d.Name == name))
         {
-            _error = $"A department named \"{name}\" already exists.";
+            ToastService.ShowError($"A department named \"{name}\" already exists.", "Duplicate name");
             return;
         }
 
@@ -118,6 +121,7 @@
         _newName = "";
         await LoadAsync();
         _busy = false;
+        ToastService.ShowSuccess($"Department \"{name}\" was added.", "Department added");
     }
 
     private void BeginEdit(Department dept)
@@ -141,7 +145,7 @@
 
         if (await DbContext.Departments.AnyAsync(d => d.Name == name && d.Id != dept.Id))
         {
-            _error = $"A department named \"{name}\" already exists.";
+            ToastService.ShowError($"A department named \"{name}\" already exists.", "Duplicate name");
             return;
         }
 
@@ -152,6 +156,7 @@
         _editingId = null;
         await LoadAsync();
         _busy = false;
+        ToastService.ShowSuccess($"Department renamed to \"{name}\".", "Department renamed");
     }
 
     private async Task DeleteAsync(Department dept)
@@ -167,6 +172,7 @@
             DbContext.Departments.Remove(tracked);
             await DbContext.SaveChangesAsync();
             await LoadAsync();
+            ToastService.ShowSuccess($"Department \"{dept.Name}\" was deleted.", "Department deleted");
         }
         _busy = false;
     }

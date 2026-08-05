@@ -1,8 +1,15 @@
 ﻿@if (!string.IsNullOrEmpty(DisplayMessage))
 {
-    var statusMessageClass = DisplayMessage.StartsWith("Error") ? "danger" : "success";
-    <div class="alert alert-@statusMessageClass" role="alert">
-        @DisplayMessage
+    var isError = DisplayMessage.StartsWith("Error", StringComparison.OrdinalIgnoreCase);
+    var toastType = isError ? minutesheet.Services.ToastType.Error : minutesheet.Services.ToastType.Success;
+    var toastText = isError && DisplayMessage.Length > 6 ? DisplayMessage[6..] : DisplayMessage;
+
+    <div class="ms-toast ms-toast-@toastType.ToString().ToLowerInvariant()">
+        <div class="ms-toast-icon">@(isError ? "✕" : "✓")</div>
+        <div class="ms-toast-content">
+            <div class="ms-toast-title">@(isError ? "Something went wrong" : "Success")</div>
+            <div class="ms-toast-msg">@toastText</div>
+        </div>
     </div>
 }
 

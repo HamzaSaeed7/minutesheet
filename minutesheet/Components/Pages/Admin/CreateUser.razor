@@ -12,21 +12,15 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject ApplicationDbContext DbContext
 @inject NavigationManager NavigationManager
+@inject minutesheet.Services.ToastService ToastService
 
 <PageTitle>Create User</PageTitle>
 
 <h1 class="page-title">Create User</h1>
 
-<div class="content-card">
-    @if (_error is not null)
-    {
-        <div class="alert alert-danger py-2">@_error</div>
-    }
-    @if (_success is not null)
-    {
-        <div class="alert alert-success py-2">@_success</div>
-    }
+<ToastHost />
 
+<div class="content-card">
     <EditForm Model="Input" OnValidSubmit="CreateAsync" FormName="admin-create-user">
         <DataAnnotationsValidator />
 
@@ -90,8 +84,6 @@
 @code {
     private List<Department> _departments = new();
     private bool _busy;
-    private string? _error;
-    private string? _success;
 
     [SupplyParameterFromForm]
     private InputModel Input { get; set; } = new();
@@ -110,15 +102,13 @@
 
     private async Task CreateAsync()
     {
-        _error = null;
-        _success = null;
         _busy = true;
 
         try
         {
             if (await UserManager.FindByEmailAsync(Input.Email) is not null)
             {
-                _error = $"An account with the email {Input.Email} already exists.";
+                ToastService.ShowError($"An account with the email {Input.Email} already exists.", "Duplicate email");
                 return;
             }
 
@@ -138,7 +128,7 @@
             var result = await UserManager.CreateAsync(user, Input.Password);
             if (!result.Succeeded)
             {
-                _error = string.Join(", ", result.Errors.Select(e => e.Description));
+                ToastService.ShowError(string.Join(", ", result.Errors.Select(e => e.Description)), "Couldn't create user");
                 return;
             }
 
@@ -156,7 +146,7 @@
                 }
             }
 
-            _success = $"Created {Input.Email} as {role}.";
+            ToastService.ShowSuccess($"Account created for {Input.Email} as {role}.", "User created");
             Input = new InputModel();
         }
         finally

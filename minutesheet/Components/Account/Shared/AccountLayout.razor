@@ -7,10 +7,14 @@
 }
 else
 {
-    <div class="auth-page">
+    <div class="auth-page auth-splash">
         <div class="auth-bg"></div>
         <div class="auth-overlay"></div>
         <div class="auth-glow"></div>
+
+        <div class="auth-splash-logo" id="authSplashLogo">
+            <img src="images/FFC-Logo-Blue-V3.webp" alt="FFC" />
+        </div>
 
         <div class="auth-wrap">
             <div class="auth-brand">
@@ -26,7 +30,7 @@ else
                 <div class="auth-badge"><span class="dot"></span>Grower Portal</div>
 
                 <h1 class="auth-headline">Partner in<br />Prosperity.</h1>
-                <p class="auth-lede">Manage your soil programs, nutrient plans and delivery schedules — all from one place.</p>
+                <p class="auth-lede" id="authLede" data-text="Manage your soil programs, nutrient plans and delivery schedules — all from one place.">Manage your soil programs, nutrient plans and delivery schedules — all from one place.</p>
 
                 <div class="auth-stats">
                     <div class="auth-stat"><div class="n">2.4M</div><div class="k">Acres served</div></div>
@@ -41,16 +45,64 @@ else
                 @Body
             </div>
         </div>
-
-        <div class="auth-foot">
-            <div>© 2026 FFC Fertilizers</div>
-            <div class="auth-foot-links">
-                <a href="#">Privacy</a>
-                <a href="#">Terms</a>
-                <a href="#">Support</a>
-            </div>
-        </div>
     </div>
+
+    <script>
+        (function () {
+            var el = document.getElementById('authLede');
+            if (!el) return;
+            var full = el.getAttribute('data-text') || el.textContent.trim();
+            var typing = true;
+            var pos = 0;
+
+            function tick() {
+                if (typing) {
+                    pos++;
+                    el.textContent = full.slice(0, pos);
+                    if (pos >= full.length) {
+                        typing = false;
+                        setTimeout(tick, 2400);
+                        return;
+                    }
+                    setTimeout(tick, 28);
+                } else {
+                    pos--;
+                    el.textContent = full.slice(0, pos);
+                    if (pos <= 0) {
+                        typing = true;
+                        setTimeout(tick, 700);
+                        return;
+                    }
+                    setTimeout(tick, 14);
+                }
+            }
+
+            // Wait for the splash reveal, then start "writing" the tagline.
+            setTimeout(tick, 1700);
+
+            // Splash logo: stays centered, then glides to its spot in the brand
+            // header as the page content reveals.
+            var splashLogo = document.getElementById('authSplashLogo');
+            var headerLogoBox = document.querySelector('.auth-brand-head .auth-logo-box');
+            if (splashLogo && headerLogoBox) {
+                setTimeout(function () {
+                    var from = splashLogo.getBoundingClientRect();
+                    var to = headerLogoBox.getBoundingClientRect();
+                    var dx = to.left + to.width / 2 - (from.left + from.width / 2);
+                    var dy = to.top + to.height / 2 - (from.top + from.height / 2);
+                    var scale = to.width / from.width;
+                    var D = 900;
+                    splashLogo.style.transition = 'transform ' + D + 'ms cubic-bezier(.4,0,.2,1), opacity ' + (D * 0.75) + 'ms ease';
+                    // Force a reflow so the browser registers the transition on the
+                    // centered state before the transform changes (smooth glide).
+                    void splashLogo.offsetWidth;
+                    splashLogo.style.transform = 'translate(-50%, -50%) translate(' + dx + 'px,' + dy + 'px) scale(' + scale + ')';
+                    splashLogo.style.opacity = '0';
+                    setTimeout(function () { splashLogo.style.display = 'none'; }, D + 120);
+                }, 1500);
+            }
+        })();
+    </script>
 }
 
 @code {

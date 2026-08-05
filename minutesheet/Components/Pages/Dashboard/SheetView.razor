@@ -17,8 +17,11 @@
 @inject NavigationManager NavigationManager
 @inject IWebHostEnvironment Env
 @inject IJSRuntime JS
+@inject minutesheet.Services.ToastService ToastService
 
 <PageTitle>Minute Sheet</PageTitle>
+
+<ToastHost />
 
 @if (_loading)
 {
@@ -308,7 +311,7 @@ else
         var comment = GetDraft(stepId).Trim();
         if (comment.Length == 0)
         {
-            _error = "Please add a comment explaining your review.";
+            ToastService.ShowError("Please add a comment explaining your review.", "Comment required");
             return;
         }
 
@@ -324,7 +327,7 @@ else
             if (sheet is null || step is null) { _busy = false; return; }
             if (!ApprovalWorkflow.IsActionable(step, sheet.ApprovalSteps))
             {
-                _error = "An earlier approval step is still open, so this step can't be actioned yet.";
+                ToastService.ShowError("An earlier approval step is still open, so this step can't be actioned yet.", "Step not ready");
                 _busy = false;
                 return;
             }
@@ -356,6 +359,7 @@ else
                 $"{MyName()} reviewed your minute sheet and left a comment to resolve.",
                 NavigationManager.Uri));
         }
+        ToastService.ShowSuccess("Your review has been submitted and the sheet creator was notified.", "Review submitted");
         _busy = false;
     }
 
@@ -377,7 +381,7 @@ else
             if (sheet is null || step is null) { _busy = false; return; }
             if (!ApprovalWorkflow.IsActionable(step, sheet.ApprovalSteps))
             {
-                _error = "An earlier approval step is still open, so this step can't be actioned yet.";
+                ToastService.ShowError("An earlier approval step is still open, so this step can't be actioned yet.", "Step not ready");
                 _busy = false;
                 return;
             }
@@ -413,6 +417,9 @@ else
                 "All approvers have approved your minute sheet.",
                 NavigationManager.Uri));
         }
+        ToastService.ShowSuccess(fullyApproved
+            ? "All approval steps are complete and the sheet is fully approved."
+            : "This step has been approved. The next approver has been notified.", fullyApproved ? "Fully approved" : "Step approved");
         _busy = false;
     }
 
@@ -423,7 +430,7 @@ else
         var note = GetResolveDraft(stepId).Trim();
         if (note.Length == 0)
         {
-            _error = "Please describe how you resolved the review.";
+            ToastService.ShowError("Please describe how you resolved the review.", "Note required");
             return;
         }
 
@@ -466,6 +473,7 @@ else
                 $"{MyName()} resolved your review. Please take another look and review or approve.",
                 NavigationManager.Uri));
         }
+        ToastService.ShowSuccess("The review has been resolved and sent back to the approver.", "Review resolved");
         _busy = false;
     }
 
@@ -501,7 +509,8 @@ else
             catch (IOException) { /* best-effort cleanup */ }
         }
 
-        NavigationManager.NavigateTo("dashboard/history");
+        ToastService.ShowSuccess("The minute sheet was deleted permanently.", "Sheet deleted");
+        NavigationManager.NavigateTo("/dashboard/history", forceLoad: false);
     }
 
     private string CreatorMeta()
