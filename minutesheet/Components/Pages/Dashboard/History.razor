@@ -42,7 +42,43 @@
     }
     else
     {
-        <div class="history-list">
+        <div class="history-toolbar">
+            <div class="ht-search">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                <input type="text" placeholder="Search by category, creator or attachment..." @bind="_search" @bind:event="oninput" @bind:after="ResetFiltersPage" />
+            </div>
+            <div class="ht-filters">
+                <select class="ht-select" @bind="_statusFilter" @bind:after="ResetFiltersPage">
+                    <option value="">All statuses</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Pending">Pending</option>
+                </select>
+                <select class="ht-select" @bind="_categoryFilter" @bind:after="ResetFiltersPage">
+                    <option value="">All categories</option>
+                    <option value="Financial">Financial</option>
+                    <option value="NonFinancial">Non-Financial</option>
+                </select>
+                <select class="ht-select" @bind="_attachmentFilter" @bind:after="ResetFiltersPage">
+                    <option value="">Any attachment</option>
+                    <option value="Yes">With attachment</option>
+                    <option value="No">No attachment</option>
+                </select>
+                <button type="button" class="ht-clear" @onclick="ClearFilters" disabled="@(_search.Length == 0 && _statusFilter.Length == 0 && _categoryFilter.Length == 0 && _attachmentFilter.Length == 0)">Clear</button>
+            </div>
+        </div>
+
+        @if (_filteredSheets.Count == 0)
+        {
+            <div class="history-empty">
+                <div class="history-empty-icon">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                </div>
+                <p class="history-empty-text">No sheets match your search or filters.</p>
+            </div>
+        }
+        else
+        {
+            <div class="history-list">
             @foreach (var sheet in _pagedSheets)
             {
                 var status = ApprovalWorkflow.StatusFor(sheet);
@@ -121,25 +157,26 @@
             }
         </div>
 
-        @if (_sheets.Count > PageSize)
-        {
-            <div class="history-pagination">
-                <button type="button" class="pgn-btn" disabled="@(_pageIndex == 0)" @onclick="() => GoToPage(_pageIndex - 1)">
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"></path></svg>
-                    <span>Prev</span>
-                </button>
-                <div class="pgn-pages">
-                    @foreach (var p in PageNumbers)
-                    {
-                        <button type="button" class="pgn-num @(p == _pageIndex ? "active" : "")" @onclick="() => GoToPage(p)">@(p + 1)</button>
-                    }
+            @if (_filteredSheets.Count > PageSize)
+            {
+                <div class="history-pagination">
+                    <button type="button" class="pgn-btn" disabled="@(_pageIndex == 0)" @onclick="() => GoToPage(_pageIndex - 1)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"></path></svg>
+                        <span>Prev</span>
+                    </button>
+                    <div class="pgn-pages">
+                        @foreach (var p in PageNumbers)
+                        {
+                            <button type="button" class="pgn-num @(p == _pageIndex ? "active" : "")" @onclick="() => GoToPage(p)">@(p + 1)</button>
+                        }
+                    </div>
+                    <button type="button" class="pgn-btn" disabled="@(_pageIndex >= TotalPages - 1)" @onclick="() => GoToPage(_pageIndex + 1)">
+                        <span>Next</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"></path></svg>
+                    </button>
+                    <span class="pgn-count">Showing @ShownStart–@ShownEnd of @_filteredSheets.Count</span>
                 </div>
-                <button type="button" class="pgn-btn" disabled="@(_pageIndex >= TotalPages - 1)" @onclick="() => GoToPage(_pageIndex + 1)">
-                    <span>Next</span>
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"></path></svg>
-                </button>
-                <span class="pgn-count">Showing @ShownStart–@ShownEnd of @_sheets.Count</span>
-            </div>
+            }
         }
     }
 </div>
@@ -152,16 +189,68 @@
     private bool _busy;
     private bool _showPublic;
     private int _pageIndex;
+    private string _search = "";
+    private string _statusFilter = "";
+    private string _categoryFilter = "";
+    private string _attachmentFilter = "";
 
-    private int TotalPages => _sheets is { Count: > 0 }
-        ? (int)Math.Ceiling(_sheets.Count / (double)PageSize)
+    private List<MinuteSheet> _filteredSheets =>
+        _sheets?.Where(MatchesFilters).ToList() ?? new();
+
+    private int TotalPages => _filteredSheets is { Count: > 0 }
+        ? (int)Math.Ceiling(_filteredSheets.Count / (double)PageSize)
         : 1;
 
     private IEnumerable<MinuteSheet> _pagedSheets =>
-        _sheets?.Skip(_pageIndex * PageSize).Take(PageSize).ToList() ?? new();
+        _filteredSheets.Skip(_pageIndex * PageSize).Take(PageSize).ToList();
 
-    private int ShownStart => _sheets is { Count: > 0 } ? _pageIndex * PageSize + 1 : 0;
-    private int ShownEnd => Math.Min((_pageIndex + 1) * PageSize, _sheets?.Count ?? 0);
+    private int ShownStart => _filteredSheets.Count > 0 ? _pageIndex * PageSize + 1 : 0;
+    private int ShownEnd => Math.Min((_pageIndex + 1) * PageSize, _filteredSheets.Count);
+
+    private bool MatchesFilters(MinuteSheet sheet)
+    {
+        if (_statusFilter.Length > 0 && ApprovalWorkflow.StatusFor(sheet) != _statusFilter)
+            return false;
+
+        if (_categoryFilter.Length > 0)
+        {
+            var cat = sheet.Category == SheetCategory.NonFinancial ? "NonFinancial" : "Financial";
+            if (cat != _categoryFilter) return false;
+        }
+
+        if (_attachmentFilter.Length > 0)
+        {
+            var has = !string.IsNullOrEmpty(sheet.AttachmentStoredPath);
+            if (_attachmentFilter == "Yes" && !has) return false;
+            if (_attachmentFilter == "No" && has) return false;
+        }
+
+        var term = _search.Trim();
+        if (term.Length > 0)
+        {
+            var haystack = string.Join(" ", new[]
+            {
+                sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial",
+                sheet.CreatedByUser?.FullName ?? "",
+                sheet.CreatedByUser?.Email ?? "",
+                sheet.AttachmentFileName ?? ""
+            });
+            if (!haystack.Contains(term, StringComparison.OrdinalIgnoreCase)) return false;
+        }
+
+        return true;
+    }
+
+    private void ResetFiltersPage() => _pageIndex = 0;
+
+    private void ClearFilters()
+    {
+        _search = "";
+        _statusFilter = "";
+        _categoryFilter = "";
+        _attachmentFilter = "";
+        _pageIndex = 0;
+    }
 
     private IEnumerable<int> PageNumbers
     {
