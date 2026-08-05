@@ -247,6 +247,41 @@ else
                 @if (!string.IsNullOrEmpty(_summary))
                 {
                     <textarea class="form-control" rows="6" readonly style="font-family: 'Poppins', sans-serif; font-size: 14px; resize: vertical;">@_summary</textarea>
+                    @if (_actions.Count > 0 || _decisions.Count > 0)
+                    {
+                        <div style="display:grid;gap:10px;font-family:'Poppins',sans-serif;">
+                            @if (_actions.Count > 0)
+                            {
+                                <div style="background:#f0f4ff;border:1px solid #d3e0ff;border-left:4px solid #000066;border-radius:6px;padding:10px 14px;">
+                                    <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#000066;margin-bottom:6px;font-size:13px;">
+                                        <span style="width:8px;height:8px;border-radius:50%;background:#000066;display:inline-block;"></span>
+                                        Actions
+                                    </div>
+                                    <ul style="margin:0;padding-left:18px;font-size:13px;">
+                                        @foreach (var item in _actions)
+                                        {
+                                            <li style="margin-bottom:3px;">@item</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                            @if (_decisions.Count > 0)
+                            {
+                                <div style="background:#f2faf7;border:1px solid #d2ece3;border-left:4px solid #1a8a5a;border-radius:6px;padding:10px 14px;">
+                                    <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#1a8a5a;margin-bottom:6px;font-size:13px;">
+                                        <span style="width:8px;height:8px;border-radius:50%;background:#1a8a5a;display:inline-block;"></span>
+                                        Decisions
+                                    </div>
+                                    <ul style="margin:0;padding-left:18px;font-size:13px;">
+                                        @foreach (var item in _decisions)
+                                        {
+                                            <li style="margin-bottom:3px;">@item</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                        </div>
+                    }
                     <div class="d-flex flex-wrap" style="gap:8px;">
                         <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadDocxAsync" disabled="@_downloading">
                             <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Word (.docx)
@@ -284,6 +319,8 @@ else
     private string? _existingAttachmentPath;
     private string _initialDescriptionHtml = "";
     private string? _summary;
+    private List<string> _actions = new();
+    private List<string> _decisions = new();
     private bool _generatingSummary;
     private bool _downloading;
 
@@ -357,6 +394,9 @@ else
                     _existingAttachmentName = sheet.AttachmentFileName;
                     _existingAttachmentPath = sheet.AttachmentStoredPath;
                     _summary = sheet.Summary;
+                    var (actions, decisions) = ParseActionsDecisions(sheet.ActionsDecisions);
+                    _actions = actions;
+                    _decisions = decisions;
                     _rows.Clear();
                     _lockedSteps.Clear();
                     foreach (var step in sheet.ApprovalSteps.OrderBy(s => s.StepIndex))
@@ -529,6 +569,7 @@ else
                 sheet.IsConfidential = _isConfidential;
                 sheet.DescriptionHtml = descriptionHtml;
                 sheet.Summary = _summary;
+                sheet.ActionsDecisions = SerializeActionsDecisions(_actions, _decisions);
 
                 // Only rebuild the workflow while every step is still pending. Once
                 // approvals are underway (reviews to resolve), the steps are locked
@@ -576,6 +617,7 @@ else
                     IsConfidential = _isConfidential,
                     DescriptionHtml = descriptionHtml,
                     Summary = _summary,
+                    ActionsDecisions = SerializeActionsDecisions(_actions, _decisions),
                     AttachmentFileName = originalName,
                     AttachmentStoredPath = storedPath,
                     CreatedByUserId = user.Id,
@@ -648,6 +690,51 @@ else
         return attr?.Name ?? d.ToString();
     }
 
+    private static (List<string> Actions, List<string> Decisions) ParseActionsDecisions(string? json)
+    {
+        var actions = new List<string>();
+        var decisions = new List<string>();
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return (actions, decisions);
+        }
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("actions", out var a) && a.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in a.EnumerateArray())
+                {
+                    var text = item.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text)) actions.Add(text);
+                }
+            }
+            if (root.TryGetProperty("decisions", out var d) && d.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in d.EnumerateArray())
+                {
+                    var text = item.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text)) decisions.Add(text);
+                }
+            }
+        }
+        catch
+        {
+            // Ignore malformed JSON.
+        }
+        return (actions, decisions);
+    }
+
+    private static string? SerializeActionsDecisions(List<string> actions, List<string> decisions)
+    {
+        if (actions.Count == 0 && decisions.Count == 0)
+        {
+            return null;
+        }
+        return System.Text.Json.JsonSerializer.Serialize(new { actions, decisions });
+    }
+
     private static string Initials(string? fullName, string? email)
     {
         var source = !string.IsNullOrWhiteSpace(fullName) ? fullName : email ?? "";
@@ -688,7 +775,7 @@ else
 
             var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
             
-            _summary = await SummarizationService.GenerateSummaryAsync(
+            var result = await SummarizationService.GenerateSummaryAsync(
                 _category.ToString(), 
                 creatorName, 
                 creatorDesignation, 
@@ -696,6 +783,10 @@ else
                 creatorEmpNo, 
                 descriptionHtml, 
                 _selectedFile);
+
+            _summary = result.Summary;
+            _actions = result.Actions;
+            _decisions = result.Decisions;
 
             ToastService.ShowSuccess("Summary generated for your minute sheet.", "Summary ready");
         }
