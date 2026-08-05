@@ -683,6 +683,15 @@ button.ql-dictateEn.listening, button.ql-dictateUr.listening {
     margin-top: 10px;
 }
 
+/* Inline status message (rendered inside an auth card, not the floating
+   viewport). It must stay put and keep its box in flow — the floating
+   fade-out animation would otherwise hide it while still reserving space,
+   leaving an empty gap. */
+.ms-toast-inline {
+    margin-bottom: 22px;
+    animation: ms-toast-in 0.25s ease;
+}
+
 .ms-toast-icon {
     flex: 0 0 auto;
     width: 26px;

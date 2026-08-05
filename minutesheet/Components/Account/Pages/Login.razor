@@ -3,9 +3,13 @@
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using minutesheet.Components.Account
 @using minutesheet.Data
 
 @inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject SmtpEmailSender EmailSender
 @inject ILogger<Login> Logger
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
@@ -22,9 +26,9 @@
     <ValidationSummary class="text-danger" role="alert" />
 
     <div class="auth-field">
-        <label>Email</label>
-        <InputText @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
-        <ValidationMessage For="() => Input.Email" class="text-danger" />
+        <label>Email or Employee Number</label>
+        <InputText @bind-Value="Input.Identifier" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com or employee number" />
+        <ValidationMessage For="() => Input.Identifier" class="text-danger" />
     </div>
 
     <div class="auth-field">
@@ -63,14 +67,6 @@
     <button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
 </EditForm>
 
-<div class="auth-divider">
-    <span class="line"></span>
-    <span class="word">or</span>
-    <span class="line"></span>
-</div>
-
-<button type="button" class="auth-sso">Continue with single sign-on</button>
-
 <p class="auth-footer">
     New here? <a href="@(NavigationManager.GetUriWithQueryParameters("Account/Register", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">Create an account</a>
 </p>
@@ -98,19 +94,34 @@
 
     public async Task LoginUser()
     {
-        // This doesn't count login failures towards account lockout
-        // To enable password failures to trigger account lockout, set lockoutOnFailure: true
-        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+        var identifier = Input.Identifier.Trim();
+        var user = identifier.Contains('@')
+            ? await UserManager.FindByEmailAsync(identifier)
+            : await UserManager.Users.FirstOrDefaultAsync(u => u.EmployeeNo == identifier);
+
+        if (user is null)
+        {
+            errorMessage = "Error: Invalid login attempt.";
+            return;
+        }
+
+        // Validates the password and checks lockout/confirmation without signing the
+        // user in yet — the cookie is only issued once the emailed OTP is verified.
+        var result = await SignInManager.CheckPasswordSignInAsync(user, Input.Password, lockoutOnFailure: false);
         if (result.Succeeded)
         {
-            Logger.LogInformation("User logged in.");
-            RedirectManager.RedirectToWithStatus(ReturnUrl, "You're logged in. Welcome back!", HttpContext);
-        }
-        else if (result.RequiresTwoFactor)
-        {
-            RedirectManager.RedirectTo(
-                "Account/LoginWith2fa",
-                new() { ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
+            var code = await UserManager.GenerateUserTokenAsync(user, TokenOptions.DefaultEmailProvider, "login-otp");
+            var sent = await EmailSender.SendOtpAsync(user.Email!, code);
+
+            var otpUri = NavigationManager.GetUriWithQueryParameters(
+                NavigationManager.ToAbsoluteUri("Account/LoginOtp").AbsoluteUri,
+                new Dictionary<string, object?> { ["email"] = user.Email, ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
+
+            RedirectManager.RedirectToWithStatus(otpUri,
+                sent
+                    ? "We sent a 6-digit code to your email. Enter it to finish logging in."
+                    : "Error: We couldn't send the verification email. Use \"Resend code\" on the next page.",
+                HttpContext);
         }
         else if (result.IsLockedOut)
         {
@@ -126,8 +137,8 @@
     private sealed class InputModel
     {
         [Required]
-        [EmailAddress]
-        public string Email { get; set; } = "";
+        [Display(Name = "Email or Employee Number")]
+        public string Identifier { get; set; } = "";
 
         [Required]
         [DataType(DataType.Password)]

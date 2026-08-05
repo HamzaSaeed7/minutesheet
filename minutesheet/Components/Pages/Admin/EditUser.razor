@@ -1,0 +1,280 @@
+@page "/admin/users/{Id}/edit"
+@rendermode InteractiveServer
+
+@using System.ComponentModel.DataAnnotations
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using minutesheet.Data
+
+@attribute [Authorize(Roles = Roles.Admin)]
+
+@inject UserManager<ApplicationUser> UserManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ApplicationDbContext DbContext
+@inject NavigationManager NavigationManager
+@inject minutesheet.Services.ToastService ToastService
+
+<PageTitle>Edit User</PageTitle>
+
+<h1 class="page-title">Edit User</h1>
+
+<ToastHost />
+
+<div class="content-card">
+    @if (_notFound)
+    {
+        <p class="text-muted mb-0">User not found. <a href="admin/users">Back to users</a></p>
+    }
+    else if (_user is null)
+    {
+        <p>Loading...</p>
+    }
+    else
+    {
+        <EditForm Model="Input" OnValidSubmit="SaveAsync" FormName="admin-edit-user">
+            <DataAnnotationsValidator />
+
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <label class="form-label">Email</label>
+                    <InputText @bind-Value="Input.Email" class="form-control" autocomplete="off" placeholder="name@example.com" />
+                    <ValidationMessage For="() => Input.Email" class="text-danger" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">New password <span class="text-muted" style="font-weight:400;">(leave blank to keep current)</span></label>
+                    <InputText type="text" @bind-Value="Input.NewPassword" class="form-control" autocomplete="off" placeholder="At least 6 characters" />
+                    <ValidationMessage For="() => Input.NewPassword" class="text-danger" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Full name</label>
+                    <InputText @bind-Value="Input.FullName" class="form-control" placeholder="Full name" />
+                    <ValidationMessage For="() => Input.FullName" class="text-danger" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Employee No.</label>
+                    <InputText @bind-Value="Input.EmployeeNo" class="form-control" placeholder="Employee number" />
+                    <ValidationMessage For="() => Input.EmployeeNo" class="text-danger" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Designation</label>
+                    <InputSelect @bind-Value="Input.Designation" class="form-select">
+                        @foreach (var d in Enum.GetValues<Designation>())
+                        {
+                            <option value="@d">@DisplayName(d)</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Department</label>
+                    <InputSelect @bind-Value="Input.DepartmentId" class="form-select">
+                        <option value="">-- Select department --</option>
+                        @foreach (var dept in _departments)
+                        {
+                            <option value="@dept.Id">@dept.Name</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="() => Input.DepartmentId" class="text-danger" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label">Role</label>
+                    <InputSelect @bind-Value="Input.Role" class="form-select" disabled="@_isSelf">
+                        <option value="@Roles.Employee">@Roles.Employee</option>
+                        <option value="@Roles.Admin">@Roles.Admin</option>
+                    </InputSelect>
+                    @if (_isSelf)
+                    {
+                        <div class="form-text">You can't change your own role.</div>
+                    }
+                </div>
+            </div>
+
+            <div class="d-flex gap-2 mt-4">
+                <button type="submit" class="btn btn-primary" disabled="@_busy">Save changes</button>
+                <a class="btn btn-outline-secondary" href="admin/users">Back to users</a>
+            </div>
+        </EditForm>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public string Id { get; set; } = "";
+
+    private ApplicationUser? _user;
+    private List<Department> _departments = new();
+    private bool _busy;
+    private bool _isSelf;
+    private bool _notFound;
+    private int? _originalDepartmentId;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _departments = await DbContext.Departments.OrderBy(d => d.Name).ToListAsync();
+
+        _user = await UserManager.FindByIdAsync(Id);
+        if (_user is null)
+        {
+            _notFound = true;
+            return;
+        }
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _isSelf = UserManager.GetUserId(authState.User) == _user.Id;
+        _originalDepartmentId = _user.DepartmentId;
+
+        var isAdmin = await UserManager.IsInRoleAsync(_user, Roles.Admin);
+
+        // Only seed the form on GET; on POST the posted values must survive.
+        Input = new InputModel
+        {
+            Email = _user.Email ?? "",
+            FullName = _user.FullName,
+            EmployeeNo = _user.EmployeeNo,
+            Designation = _user.Designation,
+            DepartmentId = _user.DepartmentId,
+            Role = isAdmin ? Roles.Admin : Roles.Employee
+        };
+    }
+
+    private static string DisplayName(Designation d)
+    {
+        var member = typeof(Designation).GetMember(d.ToString()).FirstOrDefault();
+        var attr = member?.GetCustomAttributes(typeof(DisplayAttribute), false).FirstOrDefault() as DisplayAttribute;
+        return attr?.Name ?? d.ToString();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (_user is null) return;
+        _busy = true;
+
+        try
+        {
+            // Email / username change — keep both in sync so login by email still works.
+            if (!string.Equals(_user.Email, Input.Email, StringComparison.OrdinalIgnoreCase))
+            {
+                var existing = await UserManager.FindByEmailAsync(Input.Email);
+                if (existing is not null && existing.Id != _user.Id)
+                {
+                    ToastService.ShowError($"Another account already uses {Input.Email}.", "Duplicate email");
+                    return;
+                }
+
+                var setEmail = await UserManager.SetEmailAsync(_user, Input.Email);
+                var setName = await UserManager.SetUserNameAsync(_user, Input.Email);
+                if (!setEmail.Succeeded || !setName.Succeeded)
+                {
+                    var errs = setEmail.Errors.Concat(setName.Errors).Select(e => e.Description);
+                    ToastService.ShowError(string.Join(", ", errs), "Couldn't update email");
+                    return;
+                }
+            }
+
+            _user.FullName = Input.FullName;
+            _user.EmployeeNo = Input.EmployeeNo;
+            _user.Designation = Input.Designation;
+            _user.DepartmentId = Input.DepartmentId;
+
+            var update = await UserManager.UpdateAsync(_user);
+            if (!update.Succeeded)
+            {
+                ToastService.ShowError(string.Join(", ", update.Errors.Select(e => e.Description)), "Couldn't save changes");
+                return;
+            }
+
+            // Optional password reset.
+            if (!string.IsNullOrWhiteSpace(Input.NewPassword))
+            {
+                var token = await UserManager.GeneratePasswordResetTokenAsync(_user);
+                var reset = await UserManager.ResetPasswordAsync(_user, token, Input.NewPassword);
+                if (!reset.Succeeded)
+                {
+                    ToastService.ShowError(string.Join(", ", reset.Errors.Select(e => e.Description)), "Couldn't reset password");
+                    return;
+                }
+            }
+
+            // Role change (not allowed for self, to avoid an admin locking themselves out).
+            if (!_isSelf)
+            {
+                var isAdmin = await UserManager.IsInRoleAsync(_user, Roles.Admin);
+                var wantAdmin = Input.Role == Roles.Admin;
+                if (isAdmin != wantAdmin)
+                {
+                    if (wantAdmin)
+                    {
+                        await UserManager.RemoveFromRoleAsync(_user, Roles.Employee);
+                        await UserManager.AddToRoleAsync(_user, Roles.Admin);
+                    }
+                    else
+                    {
+                        await UserManager.RemoveFromRoleAsync(_user, Roles.Admin);
+                        await UserManager.AddToRoleAsync(_user, Roles.Employee);
+                    }
+                }
+            }
+
+            // Keep department running counts in step when a user moves department.
+            if (_originalDepartmentId != Input.DepartmentId)
+            {
+                if (_originalDepartmentId is int oldId)
+                {
+                    var oldDept = await DbContext.Departments.FirstOrDefaultAsync(d => d.Id == oldId);
+                    if (oldDept is not null && oldDept.EmployeeCount > 0) oldDept.EmployeeCount -= 1;
+                }
+                if (Input.DepartmentId is int newId)
+                {
+                    var newDept = await DbContext.Departments.FirstOrDefaultAsync(d => d.Id == newId);
+                    if (newDept is not null) newDept.EmployeeCount += 1;
+                }
+                await DbContext.SaveChangesAsync();
+                _originalDepartmentId = Input.DepartmentId;
+            }
+
+            // Rebuild the principal so role/identity changes take effect on next revalidation.
+            await UserManager.UpdateSecurityStampAsync(_user);
+
+            ToastService.ShowSuccess($"Changes saved for {Input.Email}.", "User updated");
+            NavigationManager.NavigateTo("admin/users");
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private sealed class InputModel
+    {
+        [Required]
+        [EmailAddress]
+        [Display(Name = "Email")]
+        public string Email { get; set; } = "";
+
+        [StringLength(100, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
+        [Display(Name = "New password")]
+        public string? NewPassword { get; set; }
+
+        [Required]
+        [Display(Name = "Name")]
+        public string FullName { get; set; } = "";
+
+        [Required]
+        [Display(Name = "Employee No.")]
+        public string EmployeeNo { get; set; } = "";
+
+        [Required]
+        public Designation Designation { get; set; } = Designation.Executive;
+
+        [Required(ErrorMessage = "Please select a department.")]
+        [Display(Name = "Department")]
+        public int? DepartmentId { get; set; }
+
+        [Required]
+        public string Role { get; set; } = Roles.Employee;
+    }
+}

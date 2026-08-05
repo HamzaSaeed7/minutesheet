@@ -279,8 +279,9 @@ else
 
         _isCreator = _sheet.CreatedByUserId == _me.Id;
         // Full edit while all steps are pending; limited edit (description +
-        // attachment) once there are reviews to resolve.
-        _canEdit = _isCreator && (_sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending)
+        // attachment) once there are reviews to resolve. Admins can edit any sheet
+        // on the same terms as its creator.
+        _canEdit = (_isCreator || _isAdmin) && (_sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending)
                                   || _sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed));
         var myEmail = _me.Email ?? "";
         var isApprover = _sheet.ApprovalSteps.Any(s => string.Equals(s.ApproverEmail, myEmail, StringComparison.OrdinalIgnoreCase));
