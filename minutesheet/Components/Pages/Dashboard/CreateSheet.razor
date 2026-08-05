@@ -170,7 +170,7 @@ else
                                     <option value="@ApprovalAction.Approve">Approve</option>
                                 </select>
                             }
-                            <input list="approverEmailOptions" class="form-control form-control-sm" style="flex:1;" placeholder="-- select approver --" @bind="row.ApproverEmail" @bind:event="oninput" />
+                            <input list="approverEmailOptions" class="form-control form-control-sm wf-approver" placeholder="-- select approver --" @bind="row.ApproverEmail" @bind:event="oninput" />
                             @if (_rows.Count > 1)
                             {
                                 <button type="button" class="wf-remove" @onclick="() => RemoveRow(row)">&times;</button>
