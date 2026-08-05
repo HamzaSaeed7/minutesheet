@@ -106,7 +106,7 @@ public class DocumentSummarizationService
 
         var payload = new
         {
-            model = "openrouter/free",
+            model = "openai/gpt-oss-20b:free",
             messages = new[]
             {
                 new { role = "system", content = "Provide a concise, professional summary of the entire provided text. Regardless of whether the input text is in English, Urdu script, or Roman Urdu, the final summary MUST be written in English." },

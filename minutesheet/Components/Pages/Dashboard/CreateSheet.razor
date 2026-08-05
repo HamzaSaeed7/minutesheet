@@ -154,6 +154,12 @@ else
             }
             else
             {
+                <datalist id="approverEmailOptions">
+                    @foreach (var email in _approverEmails)
+                    {
+                        <option value="@email" />
+                    }
+                </datalist>
                 <div class="d-flex flex-column" style="gap:10px;">
                     @for (int i = 0; i < _rows.Count; i++)
                     {
@@ -163,7 +169,7 @@ else
                             <div class="wf-num">@(i + 1)</div>
                             @if (isLast)
                             {
-                                <span class="wf-chip approve">Approve</span>
+                                <span class="wf-chip approve">Approver</span>
                             }
                             else
                             {
@@ -172,13 +178,7 @@ else
                                     <option value="@ApprovalAction.Approve">Approve</option>
                                 </select>
                             }
-                            <select class="form-select form-select-sm" style="flex:1;" @bind="row.ApproverEmail">
-                                <option value="">-- select approver --</option>
-                                @foreach (var email in _approverEmails)
-                                {
-                                    <option value="@email">@email</option>
-                                }
-                            </select>
+                            <input list="approverEmailOptions" class="form-control form-control-sm" style="flex:1;" placeholder="-- select approver --" @bind="row.ApproverEmail" @bind:event="oninput" />
                             @if (_rows.Count > 1)
                             {
                                 <button type="button" class="wf-remove" @onclick="() => RemoveRow(row)">&times;</button>
@@ -294,6 +294,12 @@ else
 
         var authState = await AuthState;
         var userId = UserManager.GetUserId(authState.User);
+        var isAdmin = authState.User.IsInRole(Roles.Admin);
+
+        // Whose details show in the "Prepared by" card. Defaults to the current
+        // user (create flow); in edit mode it's the sheet's actual creator, so an
+        // admin editing another user's sheet still sees the real preparer.
+        var creatorId = userId;
 
         if (_isEdit)
         {
@@ -306,7 +312,7 @@ else
                 _canEdit = false;
                 _error = "This minute sheet could not be found.";
             }
-            else if (sheet.CreatedByUserId != userId)
+            else if (sheet.CreatedByUserId != userId && !isAdmin)
             {
                 _canEdit = false;
                 _error = "You don't have access to edit this minute sheet.";
@@ -328,6 +334,7 @@ else
                 }
                 else
                 {
+                    creatorId = sheet.CreatedByUserId;
                     _category = sheet.Category;
                     _isConfidential = sheet.IsConfidential;
                     _initialDescriptionHtml = sheet.DescriptionHtml;
@@ -349,11 +356,11 @@ else
             }
         }
 
-        if (userId is not null)
+        if (creatorId is not null)
         {
             _creator = await DbContext.Users
                 .Include(u => u.Department)
-                .FirstOrDefaultAsync(u => u.Id == userId);
+                .FirstOrDefaultAsync(u => u.Id == creatorId);
         }
 
         _loading = false;
@@ -450,6 +457,7 @@ else
                 ToastService.ShowError("Your session has expired. Please log in again.", "Session expired");
                 return;
             }
+            var isAdmin = authState.User.IsInRole(Roles.Admin);
 
             string? storedPath = null;
             string? originalName = null;
@@ -481,7 +489,7 @@ else
                 var allPending = sheet is not null && sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending);
                 var hasReviews = sheet is not null && sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed);
 
-                if (sheet is null || sheet.CreatedByUserId != user.Id || !(allPending || hasReviews))
+                if (sheet is null || (sheet.CreatedByUserId != user.Id && !isAdmin) || !(allPending || hasReviews))
                 {
                     ToastService.ShowError("This minute sheet can no longer be edited.", "Cannot edit");
                     return;
