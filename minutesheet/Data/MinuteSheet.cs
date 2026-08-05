@@ -10,8 +10,12 @@ namespace minutesheet.Data
 
         // Rich-text HTML produced by the Quill editor.
         public string DescriptionHtml { get; set; } = "";
-        
+
         public string? Summary { get; set; }
+
+        // AI-extracted actions and decisions shown under the summary (JSON object
+        // shaped {"actions": [...], "decisions": [...]}).
+        public string? ActionsDecisions { get; set; }
 
         // Original file name as uploaded by the user (null when no attachment).
         [MaxLength(260)]

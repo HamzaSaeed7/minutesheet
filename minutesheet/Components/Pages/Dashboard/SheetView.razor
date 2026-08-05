@@ -99,6 +99,37 @@ else
             </div>
         }
 
+        @{
+            var (_actions, _decisions) = ParseActionsDecisions(_sheet.ActionsDecisions);
+        }
+        @if (_actions.Count > 0 || _decisions.Count > 0)
+        {
+            <div class="mb-3">
+                <div class="description-body" style="font-family: 'Poppins', sans-serif; background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
+                    @if (_actions.Count > 0)
+                    {
+                        <div class="creator-label mb-1" style="color: #000066; font-weight: 600;">Actions</div>
+                        <ul style="margin: 0 0 10px 0; padding-left: 20px;">
+                            @foreach (var item in _actions)
+                            {
+                                <li style="margin-bottom: 4px;">@item</li>
+                            }
+                        </ul>
+                    }
+                    @if (_decisions.Count > 0)
+                    {
+                        <div class="creator-label mb-1" style="color: #000066; font-weight: 600;">Decisions</div>
+                        <ul style="margin: 0; padding-left: 20px;">
+                            @foreach (var item in _decisions)
+                            {
+                                <li style="margin-bottom: 4px;">@item</li>
+                            }
+                        </ul>
+                    }
+                </div>
+            </div>
+        }
+
         <div class="mb-3">
             <div class="creator-label mb-1">Description</div>
             <div class="description-body">@((MarkupString)_sheet.DescriptionHtml)</div>
@@ -522,6 +553,42 @@ else
         if (!string.IsNullOrEmpty(u.Department?.Name)) parts.Add(u.Department!.Name);
         if (!string.IsNullOrEmpty(u.EmployeeNo)) parts.Add($"Emp #{u.EmployeeNo}");
         return string.Join(" · ", parts);
+    }
+
+    private static (List<string> Actions, List<string> Decisions) ParseActionsDecisions(string? json)
+    {
+        var actions = new List<string>();
+        var decisions = new List<string>();
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return (actions, decisions);
+        }
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("actions", out var a) && a.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in a.EnumerateArray())
+                {
+                    var text = item.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text)) actions.Add(text);
+                }
+            }
+            if (root.TryGetProperty("decisions", out var d) && d.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in d.EnumerateArray())
+                {
+                    var text = item.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text)) decisions.Add(text);
+                }
+            }
+        }
+        catch
+        {
+            // Ignore malformed JSON.
+        }
+        return (actions, decisions);
     }
 
     private static string DotClass(ApprovalStepStatus s) => s switch
