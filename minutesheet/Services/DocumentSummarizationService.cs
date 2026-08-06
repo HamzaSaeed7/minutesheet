@@ -107,9 +107,10 @@ public class DocumentSummarizationService
         var payload = new
         {
             model = "openai/gpt-oss-20b:free",
+            response_format = new { type = "json_object" },
             messages = new[]
             {
-                new { role = "system", content = "You are a minute-sheet summarizer. Given the provided text, produce a concise professional summary and extract the key actions and decisions. Respond ONLY with a single JSON object shaped exactly like {\"summary\": \"...\", \"actions\": [\"...\", \"...\"], \"decisions\": [\"...\", \"...\"]}. An 'action' is something that must be done or followed up (who does what by when). A 'decision' is a resolution or conclusion reached in the meeting. Regardless of whether the input text is in English, Urdu script, or Roman Urdu, the summary, every action and every decision MUST be written in English." },
+                new { role = "system", content = "You are a minute-sheet summarizer. Given the provided text, produce a concise professional summary and extract the key actions and decisions. Respond ONLY with a single JSON object shaped exactly like {\"summary\": \"...\", \"actions\": [\"...\", \"...\"], \"decisions\": [\"...\", \"...\"]}. An 'action' is something that must be done or followed up (who does what by when). A 'decision' is a resolution, conclusion, or agreement reached in the meeting. Extract EVERY decision mentioned in the text. If the text does not state an explicit decision, capture the main conclusions, resolutions, or agreed takeaways as decisions instead of leaving the array empty. The decisions array must be non-empty whenever the text contains any meaningful outcome or conclusion. Regardless of whether the input text is in English, Urdu script, or Roman Urdu, the summary, every action and every decision MUST be written in English." },
                 new { role = "user", content = documentText }
             }
         };
@@ -157,8 +158,7 @@ public class DocumentSummarizationService
 
             return ParseSummaryResult(generatedText);
         }
-        catch (HttpRequestException httpEx) when (httpEx.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
-        {
+        catch (HttpRequestException httpEx) when (httpEx.StatusCode == System.Net.HttpStatusCode.TooManyRequests)        {
             _logger.LogWarning(httpEx, "AI API rate limit reached (429)");
             return new SummaryResult("Error: AI service rate limit reached (429). Please try again in a moment or check your API quota.", new List<string>(), new List<string>());
         }
@@ -169,45 +169,72 @@ public class DocumentSummarizationService
         }
     }
 
-    private SummaryResult ParseSummaryResult(string? generatedText)
+    /// <summary>
+    /// Parses the AI's JSON reply of the shape
+    /// {"summary": "...", "actions": [...], "decisions": [...]}.
+    /// Falls back to the raw text as the summary when the reply isn't valid JSON.
+    /// </summary>
+    private static SummaryResult ParseSummaryResult(string? generatedText)
     {
         if (string.IsNullOrWhiteSpace(generatedText))
         {
-            return new SummaryResult("No summary generated.", new List<string>(), new List<string>());
+            return new SummaryResult("Summary could not be generated.", new List<string>(), new List<string>());
         }
 
         try
         {
-            using var doc = JsonDocument.Parse(generatedText.Trim());
+            var cleaned = generatedText.Trim();
+            if (cleaned.StartsWith("```"))
+            {
+                var firstLineBreak = cleaned.IndexOf('\n');
+                if (firstLineBreak > 0) cleaned = cleaned[(firstLineBreak + 1)..];
+                var fence = cleaned.LastIndexOf("```");
+                if (fence > 0) cleaned = cleaned[..fence];
+                cleaned = cleaned.Trim();
+            }
+
+            using var doc = JsonDocument.Parse(cleaned);
             var root = doc.RootElement;
 
-            var summary = root.TryGetProperty("summary", out var summaryProp) ? summaryProp.GetString() : "";
-            var actions = new List<string>();
-            var decisions = new List<string>();
+            var summary = root.TryGetProperty("summary", out var summaryProp)
+                ? summaryProp.ValueKind == JsonValueKind.String ? summaryProp.GetString() ?? "" : ""
+                : "";
 
+            var actions = new List<string>();
             if (root.TryGetProperty("actions", out var actionsProp) && actionsProp.ValueKind == JsonValueKind.Array)
             {
                 foreach (var item in actionsProp.EnumerateArray())
                 {
-                    actions.Add(item.GetString() ?? "");
+                    if (item.ValueKind == JsonValueKind.String)
+                    {
+                        actions.Add(item.GetString() ?? "");
+                    }
                 }
             }
 
+            var decisions = new List<string>();
             if (root.TryGetProperty("decisions", out var decisionsProp) && decisionsProp.ValueKind == JsonValueKind.Array)
             {
                 foreach (var item in decisionsProp.EnumerateArray())
                 {
-                    decisions.Add(item.GetString() ?? "");
+                    if (item.ValueKind == JsonValueKind.String)
+                    {
+                        decisions.Add(item.GetString() ?? "");
+                    }
                 }
             }
 
-            return new SummaryResult(summary ?? "", actions, decisions);
+            if (!string.IsNullOrWhiteSpace(summary) || actions.Count > 0 || decisions.Count > 0)
+            {
+                return new SummaryResult(summary, actions, decisions);
+            }
         }
-        catch (Exception ex)
+        catch (JsonException)
         {
-            _logger.LogError(ex, "Failed to parse AI summary JSON");
-            return new SummaryResult(generatedText, new List<string>(), new List<string>());
+            // Fall through to the raw-text fallback below.
         }
+
+        return new SummaryResult(generatedText.Trim(), new List<string>(), new List<string>());
     }
 
     public async Task<string> ExtractActionItemsAsync(string documentText)
@@ -435,3 +462,5 @@ public class AgendaResponseDto
     [System.Text.Json.Serialization.JsonPropertyName("agenda_items")]
     public List<AgendaItemDto> AgendaItems { get; set; } = new();
 }
+
+public sealed record SummaryResult(string Summary, List<string> Actions, List<string> Decisions);

@@ -708,6 +708,12 @@ a, .btn-link {
 .seg-tabs { display: inline-flex; background: var(--bg); border-radius: 10px; padding: 4px; gap: 4px; }
 .seg-tab { border: none; border-radius: 7px; padding: 8px 18px; font-size: 13.5px; font-weight: 600; cursor: pointer; background: transparent; color: var(--muted); }
 .seg-tab.active { background: #fff; color: var(--brand); box-shadow: 0 1px 3px rgba(20,23,58,0.1); }
+.seg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.seg-col { min-width: 0; }
+
+@media (max-width: 640px) {
+    .seg-row { grid-template-columns: 1fr; }
+}
 .info-note { background: var(--brand-tint); border-radius: 14px; padding: 18px 20px; font-size: 13px; color: var(--brand); line-height: 1.5; }
 .step-num { width: 26px; height: 26px; border-radius: 50%; background: var(--sidebar); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
 
