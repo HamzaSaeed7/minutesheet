@@ -170,6 +170,35 @@ public class DocumentSummarizationService
     }
 
     /// <summary>
+    /// Strips a leading/trailing Markdown code fence (```json ... ```) from an AI
+    /// reply so the inner JSON can be parsed. Models frequently wrap JSON in a fence
+    /// even when asked not to; the raw backtick otherwise breaks JSON parsing with
+    /// "'`' is an invalid start of a value". Returns the trimmed inner content, or
+    /// null when the input is null/whitespace.
+    /// </summary>
+    private static string? StripJsonFence(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            return null;
+        }
+
+        var cleaned = text.Trim();
+        if (cleaned.StartsWith("```"))
+        {
+            // Drop the opening fence line (``` or ```json).
+            var firstLineBreak = cleaned.IndexOf('\n');
+            if (firstLineBreak > 0) cleaned = cleaned[(firstLineBreak + 1)..];
+            // Drop the closing fence.
+            var fence = cleaned.LastIndexOf("```", StringComparison.Ordinal);
+            if (fence >= 0) cleaned = cleaned[..fence];
+            cleaned = cleaned.Trim();
+        }
+
+        return cleaned;
+    }
+
+    /// <summary>
     /// Parses the AI's JSON reply of the shape
     /// {"summary": "...", "actions": [...], "decisions": [...]}.
     /// Falls back to the raw text as the summary when the reply isn't valid JSON.
@@ -183,15 +212,7 @@ public class DocumentSummarizationService
 
         try
         {
-            var cleaned = generatedText.Trim();
-            if (cleaned.StartsWith("```"))
-            {
-                var firstLineBreak = cleaned.IndexOf('\n');
-                if (firstLineBreak > 0) cleaned = cleaned[(firstLineBreak + 1)..];
-                var fence = cleaned.LastIndexOf("```");
-                if (fence > 0) cleaned = cleaned[..fence];
-                cleaned = cleaned.Trim();
-            }
+            var cleaned = StripJsonFence(generatedText) ?? "";
 
             using var doc = JsonDocument.Parse(cleaned);
             var root = doc.RootElement;
@@ -278,7 +299,7 @@ public class DocumentSummarizationService
             using var doc = JsonDocument.Parse(responseJson);
             var generatedText = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
 
-            return generatedText?.Trim() ?? "{\"action_items\": []}";
+            return StripJsonFence(generatedText) ?? "{\"action_items\": []}";
         }
         catch (Exception ex)
         {
@@ -328,7 +349,7 @@ public class DocumentSummarizationService
             using var doc = JsonDocument.Parse(responseJson);
             var generatedText = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
 
-            return generatedText?.Trim() ?? "{\"agenda_items\": []}";
+            return StripJsonFence(generatedText) ?? "{\"agenda_items\": []}";
         }
         catch (Exception ex)
         {
@@ -336,95 +357,6 @@ public class DocumentSummarizationService
             return "{\"error\": \"Failed to generate agenda.\"}";
         }
     }
-    // Parses the model's JSON {"summary": "...", "actions": [...], "decisions": [...]} response,
-    // falling back to treating the whole response as plain summary text.
-    private static SummaryResult ParseSummaryResult(string? generatedText)
-    {
-        if (!string.IsNullOrWhiteSpace(generatedText))
-        {
-            var trimmed = generatedText.Trim();
-
-            // The model sometimes wraps JSON in a code fence.
-            if (trimmed.StartsWith("```"))
-            {
-                var start = trimmed.IndexOf('{');
-                var end = trimmed.LastIndexOf('}');
-                if (start >= 0 && end > start)
-                {
-                    trimmed = trimmed[start..(end + 1)];
-                }
-            }
-
-            try
-            {
-                using var doc = JsonDocument.Parse(trimmed);
-                var root = doc.RootElement;
-
-                var summary = root.TryGetProperty("summary", out var summaryProp)
-                    ? summaryProp.GetString()?.Trim()
-                    : null;
-
-                var actions = ReadStringArray(root, "actions");
-                var decisions = ReadStringArray(root, "decisions");
-
-                if (!string.IsNullOrWhiteSpace(summary))
-                {
-                    return new SummaryResult(summary, actions, decisions);
-                }
-            }
-            catch (JsonException)
-            {
-                // Not valid JSON — treat the raw text as the summary.
-            }
-        }
-
-        return new SummaryResult(generatedText?.Trim() ?? "Summary could not be generated.", new List<string>(), new List<string>());
-    }
-
-    private static List<string> ReadStringArray(JsonElement root, string name)
-    {
-        var result = new List<string>();
-        if (root.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in prop.EnumerateArray())
-            {
-                var text = item.GetString()?.Trim();
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    result.Add(text);
-                }
-            }
-        }
-        return result;
-    }
-}
-
-public sealed class SummaryResult
-{
-    public SummaryResult(string summary, List<string> actions, List<string> decisions)
-    {
-        Summary = summary;
-        Actions = actions;
-        Decisions = decisions;
-    }
-
-    public string Summary { get; }
-    public List<string> Actions { get; }
-    public List<string> Decisions { get; }
-}
-
-public class SummaryResult
-{
-    public SummaryResult(string summary, List<string> actions, List<string> decisions)
-    {
-        Summary = summary;
-        Actions = actions;
-        Decisions = decisions;
-    }
-
-    public string Summary { get; set; }
-    public List<string> Actions { get; set; }
-    public List<string> Decisions { get; set; }
 }
 
 public class ActionItemDto
