@@ -8,6 +8,8 @@ window.quillInterop = (function () {
     let activeLanguage = '';
     let activeQuill = null;
     let sessionTranscript = '';
+    let activeSmartRecognition = null;
+    let isSmartRecording = false;
 
     function toggleDictation(language, buttonElement, quillInstance) {
         if (isRecording) {
@@ -171,6 +173,89 @@ window.quillInterop = (function () {
                 return;
             }
             toggleDictation(language || 'en-US', btn, quill);
+        },
+
+        startIntelligentDictation: function (elementId, btn, dotNetHelper) {
+            const quill = editors[elementId];
+            if (!quill) return;
+
+            const label = btn.querySelector('.dictate-label');
+            const originalText = 'Dictate';
+
+            if (isSmartRecording) {
+                if (activeSmartRecognition) {
+                    activeSmartRecognition.stop();
+                }
+                isSmartRecording = false;
+                quill.enable();
+                btn.classList.remove('listening');
+                if (label) label.innerText = originalText;
+                return;
+            }
+
+            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+                alert('Your browser does not support speech recognition. Please try Google Chrome.');
+                return;
+            }
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            activeSmartRecognition = new SpeechRecognition();
+
+            activeSmartRecognition.lang = 'ur-PK';
+            activeSmartRecognition.interimResults = false;
+            activeSmartRecognition.continuous = false;
+            activeSmartRecognition.maxAlternatives = 1;
+
+            activeSmartRecognition.onstart = function() {
+                isSmartRecording = true;
+                quill.disable();
+                btn.classList.add('listening');
+                if (label) label.innerText = 'Listening...';
+            };
+
+            activeSmartRecognition.onresult = function(event) {
+                if (event.results.length > 0) {
+                    let transcript = event.results[0][0].transcript;
+                    if (label) label.innerText = 'Translating...';
+                    
+                    dotNetHelper.invokeMethodAsync('TranslateUrduToEnglish', transcript)
+                        .then(englishText => {
+                            if (englishText) {
+                                const range = quill.getSelection(true);
+                                let insertPos = range ? range.index : quill.getLength();
+                                quill.insertText(insertPos, englishText + ' ');
+                                quill.setSelection(insertPos + englishText.length + 1);
+                            }
+                        })
+                        .catch(err => {
+                            console.error('Translation error', err);
+                        })
+                        .finally(() => {
+                            isSmartRecording = false;
+                            quill.enable();
+                            btn.classList.remove('listening');
+                            if (label) label.innerText = originalText;
+                        });
+                }
+            };
+
+            activeSmartRecognition.onerror = function(event) {
+                console.error('Speech recognition error', event.error);
+                isSmartRecording = false;
+                quill.enable();
+                btn.classList.remove('listening');
+                if (label) label.innerText = originalText;
+            };
+
+            activeSmartRecognition.onend = function() {
+                if (label && label.innerText === 'Listening...') {
+                   isSmartRecording = false;
+                   quill.enable();
+                   btn.classList.remove('listening');
+                   if (label) label.innerText = originalText;
+                }
+            };
+
+            activeSmartRecognition.start();
         },
 
         destroy: function (elementId) {
