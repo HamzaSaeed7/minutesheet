@@ -93,9 +93,18 @@ public class DocumentSummarizationService
         return $"Category: {category}\nPrepared By: {creatorName}\nDesignation: {creatorDesignation}\nDepartment: {creatorDepartment}\nEmp#: {creatorEmpNo}\n\nDescription:\n{plainText}\n\nAttachment Text:\n{attachmentText}";
     }
 
+    private string GetApiKey(int index)
+    {
+        var key = _configuration[$"OpenRouterSettings:ApiKeys:{index}"];
+        if (!string.IsNullOrWhiteSpace(key)) return key;
+        
+        // Fallback to legacy single-key format if array is missing
+        return _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"] ?? string.Empty;
+    }
+
     private async Task<SummaryResult> SummarizeAsync(string documentText)
     {
-        var apiKey = _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"];
+        var apiKey = GetApiKey(0);
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogError("AI API Key is not configured in OpenRouterSettings:ApiKey.");
@@ -106,7 +115,7 @@ public class DocumentSummarizationService
 
         var payload = new
         {
-            model = "openai/gpt-oss-20b:free",
+            model = "openrouter/free",
             response_format = new { type = "json_object" },
             messages = new[]
             {
@@ -170,35 +179,6 @@ public class DocumentSummarizationService
     }
 
     /// <summary>
-    /// Strips a leading/trailing Markdown code fence (```json ... ```) from an AI
-    /// reply so the inner JSON can be parsed. Models frequently wrap JSON in a fence
-    /// even when asked not to; the raw backtick otherwise breaks JSON parsing with
-    /// "'`' is an invalid start of a value". Returns the trimmed inner content, or
-    /// null when the input is null/whitespace.
-    /// </summary>
-    private static string? StripJsonFence(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            return null;
-        }
-
-        var cleaned = text.Trim();
-        if (cleaned.StartsWith("```"))
-        {
-            // Drop the opening fence line (``` or ```json).
-            var firstLineBreak = cleaned.IndexOf('\n');
-            if (firstLineBreak > 0) cleaned = cleaned[(firstLineBreak + 1)..];
-            // Drop the closing fence.
-            var fence = cleaned.LastIndexOf("```", StringComparison.Ordinal);
-            if (fence >= 0) cleaned = cleaned[..fence];
-            cleaned = cleaned.Trim();
-        }
-
-        return cleaned;
-    }
-
-    /// <summary>
     /// Parses the AI's JSON reply of the shape
     /// {"summary": "...", "actions": [...], "decisions": [...]}.
     /// Falls back to the raw text as the summary when the reply isn't valid JSON.
@@ -212,7 +192,7 @@ public class DocumentSummarizationService
 
         try
         {
-            var cleaned = StripJsonFence(generatedText) ?? "";
+            var cleaned = CleanJsonString(generatedText);
 
             using var doc = JsonDocument.Parse(cleaned);
             var root = doc.RootElement;
@@ -260,7 +240,7 @@ public class DocumentSummarizationService
 
     public async Task<string> ExtractActionItemsAsync(string documentText)
     {
-        var apiKey = _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"];
+        var apiKey = GetApiKey(1);
         if (string.IsNullOrEmpty(apiKey))
         {
             return "{\"error\": \"AI API Key is not configured.\"}";
@@ -299,7 +279,7 @@ public class DocumentSummarizationService
             using var doc = JsonDocument.Parse(responseJson);
             var generatedText = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
 
-            return StripJsonFence(generatedText) ?? "{\"action_items\": []}";
+            return CleanJsonString(generatedText) ?? "{\"action_items\": []}";
         }
         catch (Exception ex)
         {
@@ -310,7 +290,7 @@ public class DocumentSummarizationService
 
     public async Task<string> GenerateAgendaAsync(string documentText)
     {
-        var apiKey = _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"];
+        var apiKey = GetApiKey(2);
         if (string.IsNullOrEmpty(apiKey))
         {
             return "{\"error\": \"AI API Key is not configured.\"}";
@@ -349,7 +329,7 @@ public class DocumentSummarizationService
             using var doc = JsonDocument.Parse(responseJson);
             var generatedText = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
 
-            return StripJsonFence(generatedText) ?? "{\"agenda_items\": []}";
+            return CleanJsonString(generatedText) ?? "{\"agenda_items\": []}";
         }
         catch (Exception ex)
         {
@@ -357,6 +337,83 @@ public class DocumentSummarizationService
             return "{\"error\": \"Failed to generate agenda.\"}";
         }
     }
+
+    public async Task<string> TranslateUrduToEnglishAsync(string urduText)
+    {
+        var apiKey = _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"];
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            return "Error: AI API Key is not configured.";
+        }
+
+        var url = "https://openrouter.ai/api/v1/chat/completions";
+
+        var payload = new
+        {
+            model = "openrouter/free",
+            messages = new[]
+            {
+                new { role = "system", content = "You are an expert translator. Translate the following Urdu text (which may be in Urdu script or Roman Urdu) into professional English. Respond ONLY with the English translation, and nothing else." },
+                new { role = "user", content = urduText }
+            }
+        };
+
+        var jsonPayload = JsonSerializer.Serialize(payload);
+        var content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, url);
+            request.Headers.Add("Authorization", $"Bearer {apiKey}");
+            request.Headers.Add("HTTP-Referer", "http://localhost:5285");
+            request.Headers.Add("X-Title", "Minute Sheet App");
+            request.Content = content;
+
+            var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            
+            var responseJson = await response.Content.ReadAsStringAsync();
+            _logger.LogInformation("OpenRouter raw response (translation): {ResponseJson}", responseJson);
+            
+            using var doc = JsonDocument.Parse(responseJson);
+            var generatedText = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
+
+            return generatedText?.Trim() ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to call AI API for translation");
+            return $"[Translation Error: {ex.Message}]";
+        }
+    }
+    private static string? CleanJsonString(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return input;
+        var cleaned = input.Trim();
+        if (cleaned.StartsWith("```"))
+        {
+            var firstLineBreak = cleaned.IndexOf('\n');
+            if (firstLineBreak > 0) cleaned = cleaned[(firstLineBreak + 1)..];
+            var fence = cleaned.LastIndexOf("```");
+            if (fence > 0) cleaned = cleaned[..fence];
+            cleaned = cleaned.Trim();
+        }
+        return cleaned;
+    }
+}
+
+public class SummaryResult
+{
+    public SummaryResult(string summary, List<string> actions, List<string> decisions)
+    {
+        Summary = summary;
+        Actions = actions;
+        Decisions = decisions;
+    }
+
+    public string Summary { get; set; }
+    public List<string> Actions { get; set; }
+    public List<string> Decisions { get; set; }
 }
 
 public class ActionItemDto
@@ -394,5 +451,3 @@ public class AgendaResponseDto
     [System.Text.Json.Serialization.JsonPropertyName("agenda_items")]
     public List<AgendaItemDto> AgendaItems { get; set; } = new();
 }
-
-public sealed record SummaryResult(string Summary, List<string> Actions, List<string> Decisions);
