@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Http.Extensions;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Primitives;
 using minutesheet.Components.Account.Pages;
 using minutesheet.Components.Account.Pages.Manage;
@@ -47,6 +48,73 @@ namespace Microsoft.AspNetCore.Routing
             {
                 await signInManager.SignOutAsync();
                 return TypedResults.LocalRedirect($"~/{returnUrl}");
+            });
+
+            // Account deletion runs here (not in the interactive Settings circuit) because
+            // SignOutAsync must write the auth cookie to the HTTP response — impossible over
+            // a Blazor Server WebSocket, which throws "Headers are read-only".
+            accountGroup.MapPost("/DeleteAccount", async (
+                ClaimsPrincipal claims,
+                [FromServices] UserManager<ApplicationUser> userManager,
+                [FromServices] SignInManager<ApplicationUser> signInManager,
+                [FromServices] ApplicationDbContext db,
+                [FromServices] IWebHostEnvironment env,
+                [FromServices] ILoggerFactory loggerFactory,
+                [FromForm] string? password) =>
+            {
+                var logger = loggerFactory.CreateLogger("Account.DeleteAccount");
+
+                var user = await userManager.GetUserAsync(claims);
+                if (user is null)
+                {
+                    return Results.LocalRedirect("~/Account/Login");
+                }
+
+                // Require the current password only when the account has one set.
+                if (await userManager.HasPasswordAsync(user) &&
+                    !await userManager.CheckPasswordAsync(user, password ?? string.Empty))
+                {
+                    return Results.LocalRedirect("~/settings?deleteError=password");
+                }
+
+                var departmentId = user.DepartmentId;
+                var avatarPath = user.AvatarPath;
+                var userId = await userManager.GetUserIdAsync(user);
+
+                var result = await userManager.DeleteAsync(user);
+                if (!result.Succeeded)
+                {
+                    return Results.LocalRedirect("~/settings?deleteError=1");
+                }
+
+                // Best-effort avatar cleanup — a leftover file isn't worth failing on.
+                if (!string.IsNullOrEmpty(avatarPath))
+                {
+                    try
+                    {
+                        var full = Path.Combine(env.WebRootPath, avatarPath.Replace('/', Path.DirectorySeparatorChar));
+                        if (File.Exists(full))
+                        {
+                            File.Delete(full);
+                        }
+                    }
+                    catch (IOException) { }
+                }
+
+                // Keep the department headcount in sync.
+                if (departmentId is int id)
+                {
+                    var dept = await db.Departments.FirstOrDefaultAsync(d => d.Id == id);
+                    if (dept is not null)
+                    {
+                        dept.EmployeeCount = Math.Max(0, dept.EmployeeCount - 1);
+                        await db.SaveChangesAsync();
+                    }
+                }
+
+                await signInManager.SignOutAsync();
+                logger.LogInformation("User with ID '{UserId}' deleted their account.", userId);
+                return Results.LocalRedirect("~/Account/Login");
             });
 
             var manageGroup = accountGroup.MapGroup("/Manage").RequireAuthorization();
