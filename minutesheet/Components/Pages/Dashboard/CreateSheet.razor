@@ -51,21 +51,21 @@ else
         }
 
         <div class="content-card">
-            <div class="card-eyebrow" style="margin-bottom:10px;">Category</div>
-            <div class="seg-tabs">
-                <button type="button" class="seg-tab @(_category == SheetCategory.Financial ? "active" : "")" @onclick="() => _category = SheetCategory.Financial">Financial</button>
-                <button type="button" class="seg-tab @(_category == SheetCategory.NonFinancial ? "active" : "")" @onclick="() => _category = SheetCategory.NonFinancial">Non-Financial</button>
-            </div>
-        </div>
-
-        <div class="content-card">
-            <div class="card-eyebrow" style="margin-bottom:10px;">Confidentiality</div>
-            <div class="seg-tabs">
-                <button type="button" class="seg-tab @(!_isConfidential ? "active" : "")" @onclick="() => _isConfidential = false">Non-Confidential</button>
-                <button type="button" class="seg-tab @(_isConfidential ? "active" : "")" @onclick="() => _isConfidential = true">Confidential</button>
-            </div>
-            <div style="font-size:12.5px;color:#9296ab;margin-top:10px;">
-                Non-confidential sheets can be viewed by every user. Confidential sheets can only be viewed by you, the approvers listed below, and admins.
+            <div class="seg-row">
+                <div class="seg-col">
+                    <div class="card-eyebrow" style="margin-bottom:10px;">Category</div>
+                    <div class="seg-tabs">
+                        <button type="button" class="seg-tab @(_category == SheetCategory.Financial ? "active" : "")" @onclick="() => _category = SheetCategory.Financial">Financial</button>
+                        <button type="button" class="seg-tab @(_category == SheetCategory.NonFinancial ? "active" : "")" @onclick="() => _category = SheetCategory.NonFinancial">Non-Financial</button>
+                    </div>
+                </div>
+                <div class="seg-col">
+                    <div class="card-eyebrow" style="margin-bottom:10px;">Confidentiality</div>
+                    <div class="seg-tabs">
+                        <button type="button" class="seg-tab @(!_isConfidential ? "active" : "")" @onclick="() => _isConfidential = false">Non-Confidential</button>
+                        <button type="button" class="seg-tab @(_isConfidential ? "active" : "")" @onclick="() => _isConfidential = true">Confidential</button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -115,10 +115,7 @@ else
                 }
             </div>
             <div class="d-flex flex-column" style="margin-top: 16px; gap: 8px;">
-                <div class="d-flex gap-2">
-                    <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingSummary" @onclick="GenerateSummaryAsync">
-                        @(_generatingSummary ? "Generating Summary..." : "Generate Summary")
-                    </button>
+                <div class="d-flex flex-wrap" style="gap:8px;">
                     <button type="button" class="btn btn-outline-primary" style="font-family: 'Poppins', sans-serif;" disabled="@_generatingActionItems" @onclick="ExtractTasksAsync">
                         @(_generatingActionItems ? "Extracting Tasks..." : "Extract Tasks")
                     </button>
@@ -126,10 +123,6 @@ else
                         @(_generatingAgenda ? "Suggesting Agenda..." : "Suggest Agenda")
                     </button>
                 </div>
-                @if (!string.IsNullOrEmpty(_summary))
-                {
-                    <textarea class="form-control" rows="4" readonly style="font-family: 'Poppins', sans-serif; font-size: 14px;">@_summary</textarea>
-                }
                 
                 @if (_actionItems.Any())
                 {
@@ -166,6 +159,27 @@ else
                             </div>
                         }
                         <button type="button" class="btn btn-sm btn-outline-secondary mt-1" @onclick="() => _agendaItems.Add(new minutesheet.Services.AgendaItemDto())">+ Add Agenda Item</button>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="card-eyebrow" style="margin-bottom:12px;">AI Summary</div>
+            <div class="d-flex flex-column" style="gap:10px;">
+                <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingSummary" @onclick="GenerateSummaryAsync">
+                    @(_generatingSummary ? "Generating Summary..." : "Generate Summary")
+                </button>
+                @if (!string.IsNullOrEmpty(_summary))
+                {
+                    <div class="form-control" style="font-family: 'Poppins', sans-serif; font-size: 14px; white-space: pre-wrap; min-height: 120px; height: auto; overflow: hidden;">@_summary</div>
+                    <div class="d-flex flex-wrap" style="gap:8px;">
+                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadDocxAsync" disabled="@_downloading">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Word (.docx)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadPdfAsync" disabled="@_downloading">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>PDF
+                        </button>
                     </div>
                 }
             </div>
@@ -294,62 +308,42 @@ else
             }
         </div>
         <div class="content-card">
-            <div class="card-eyebrow" style="margin-bottom:12px;">AI Summary</div>
-            <div class="d-flex flex-column" style="gap:10px;">
-                <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingSummary" @onclick="GenerateSummaryAsync">
-                    @(_generatingSummary ? "Generating Summary..." : "Generate Summary")
-                </button>
-                @if (!string.IsNullOrEmpty(_summary))
-                {
-                    <textarea class="form-control" rows="6" readonly style="font-family: 'Poppins', sans-serif; font-size: 14px; resize: vertical;">@_summary</textarea>
-                    @if (_actions.Count > 0 || _decisions.Count > 0)
+            <div class="card-eyebrow" style="margin-bottom:12px;">Actions &amp; Decisions</div>
+            @if (_actions.Count > 0 || _decisions.Count > 0)
+            {
+                <div style="display:grid;gap:10px;font-family:'Poppins',sans-serif;">
+                    @if (_actions.Count > 0)
                     {
-                        <div style="display:grid;gap:10px;font-family:'Poppins',sans-serif;">
-                            @if (_actions.Count > 0)
-                            {
-                                <div style="background:#f0f4ff;border:1px solid #d3e0ff;border-left:4px solid #000066;border-radius:6px;padding:10px 14px;">
-                                    <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#000066;margin-bottom:6px;font-size:13px;">
-                                        <span style="width:8px;height:8px;border-radius:50%;background:#000066;display:inline-block;"></span>
-                                        Actions
-                                    </div>
-                                    <ul style="margin:0;padding-left:18px;font-size:13px;">
-                                        @foreach (var item in _actions)
-                                        {
-                                            <li style="margin-bottom:3px;">@item</li>
-                                        }
-                                    </ul>
-                                </div>
-                            }
-                            @if (_decisions.Count > 0)
-                            {
-                                <div style="background:#f2faf7;border:1px solid #d2ece3;border-left:4px solid #1a8a5a;border-radius:6px;padding:10px 14px;">
-                                    <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#1a8a5a;margin-bottom:6px;font-size:13px;">
-                                        <span style="width:8px;height:8px;border-radius:50%;background:#1a8a5a;display:inline-block;"></span>
-                                        Decisions
-                                    </div>
-                                    <ul style="margin:0;padding-left:18px;font-size:13px;">
-                                        @foreach (var item in _decisions)
-                                        {
-                                            <li style="margin-bottom:3px;">@item</li>
-                                        }
-                                    </ul>
-                                </div>
-                            }
+                        <div style="background:#f0f4ff;border:1px solid #d3e0ff;border-left:4px solid #000066;border-radius:6px;padding:10px 14px;">
+                            <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#000066;margin-bottom:6px;font-size:13px;">
+                                <span style="width:8px;height:8px;border-radius:50%;background:#000066;display:inline-block;"></span>
+                                Actions
+                            </div>
+                            <ul style="margin:0;padding-left:18px;font-size:13px;">
+                                @foreach (var item in _actions)
+                                {
+                                    <li style="margin-bottom:3px;">@item</li>
+                                }
+                            </ul>
                         </div>
                     }
-                    <div class="d-flex flex-wrap" style="gap:8px;">
-                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadDocxAsync" disabled="@_downloading">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Word (.docx)
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadDocAsync" disabled="@_downloading">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Word (.doc)
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadPdfAsync" disabled="@_downloading">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>PDF
-                        </button>
-                    </div>
-                }
-            </div>
+                    @if (_decisions.Count > 0)
+                    {
+                        <div style="background:#f2faf7;border:1px solid #d2ece3;border-left:4px solid #1a8a5a;border-radius:6px;padding:10px 14px;">
+                            <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#1a8a5a;margin-bottom:6px;font-size:13px;">
+                                <span style="width:8px;height:8px;border-radius:50%;background:#1a8a5a;display:inline-block;"></span>
+                                Decisions
+                            </div>
+                            <ul style="margin:0;padding-left:18px;font-size:13px;">
+                                @foreach (var item in _decisions)
+                                {
+                                    <li style="margin-bottom:3px;">@item</li>
+                                }
+                            </ul>
+                        </div>
+                    }
+                </div>
+            }
         </div>
     </div>
 </div>
@@ -377,6 +371,7 @@ else
     private List<string> _actions = new();
     private List<string> _decisions = new();
     private bool _generatingSummary;
+    private bool _downloading;
     private List<minutesheet.Services.ActionItemDto> _actionItems = new();
     private bool _generatingActionItems;
     private List<minutesheet.Services.AgendaItemDto> _agendaItems = new();
@@ -889,6 +884,83 @@ else
         {
             _generatingSummary = false;
         }
+    }
+
+    private async Task DownloadDocxAsync() => await DownloadSummaryAsync("docx");
+    private async Task DownloadDocAsync() => await DownloadSummaryAsync("doc");
+    private async Task DownloadPdfAsync() => await DownloadSummaryAsync("pdf");
+
+    private async Task DownloadSummaryAsync(string format)
+    {
+        if (string.IsNullOrWhiteSpace(_summary))
+        {
+            return;
+        }
+
+        _downloading = true;
+        try
+        {
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+
+            var content = new SheetExporter.ExportContent(
+                Title: $"Minute Sheet - {_category}",
+                Category: _category.ToString(),
+                Confidentiality: _isConfidential ? "Confidential" : "Non-Confidential",
+                Date: DateTime.Now.ToString("dd MMM yyyy hh:mm tt"),
+                PreparedBy: _creator is null
+                    ? "-"
+                    : string.IsNullOrWhiteSpace(_creator.FullName)
+                        ? _creator.Email
+                        : $"{_creator.FullName} ({_creator.Email})",
+                Description: HtmlToPlainText(descriptionHtml),
+                Summary: _summary);
+
+            byte[] bytes;
+            string mime;
+            string ext;
+            switch (format)
+            {
+                case "docx":
+                    bytes = SheetExporter.BuildDocx(content);
+                    mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+                    ext = "docx";
+                    break;
+                case "doc":
+                    bytes = SheetExporter.BuildDoc(content);
+                    mime = "application/msword";
+                    ext = "doc";
+                    break;
+                default:
+                    bytes = SheetExporter.BuildPdf(content);
+                    mime = "application/pdf";
+                    ext = "pdf";
+                    break;
+            }
+
+            var fileName = $"Minute-Sheet-{DateTime.Now:yyyyMMdd-HHmmss}.{ext}";
+            await JS.InvokeVoidAsync("quillInterop.downloadFile", fileName, mime, Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Failed to download {format.ToUpperInvariant()}: {ex.Message}", "Error");
+        }
+        finally
+        {
+            _downloading = false;
+        }
+    }
+
+    private static string HtmlToPlainText(string? html)
+    {
+        if (string.IsNullOrEmpty(html))
+        {
+            return "";
+        }
+        html = System.Text.RegularExpressions.Regex.Replace(html, "<br\\s*/?>", "\n", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        html = System.Text.RegularExpressions.Regex.Replace(html, "</p>", "\n", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        html = System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", " ");
+        html = System.Net.WebUtility.HtmlDecode(html);
+        return System.Text.RegularExpressions.Regex.Replace(html, @"[ \t]{2,}", " ").Trim();
     }
 
     private async Task ExtractTasksAsync()
