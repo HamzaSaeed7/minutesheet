@@ -93,9 +93,18 @@ public class DocumentSummarizationService
         return $"Category: {category}\nPrepared By: {creatorName}\nDesignation: {creatorDesignation}\nDepartment: {creatorDepartment}\nEmp#: {creatorEmpNo}\n\nDescription:\n{plainText}\n\nAttachment Text:\n{attachmentText}";
     }
 
+    private string GetApiKey(int index)
+    {
+        var key = _configuration[$"OpenRouterSettings:ApiKeys:{index}"];
+        if (!string.IsNullOrWhiteSpace(key)) return key;
+        
+        // Fallback to legacy single-key format if array is missing
+        return _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"] ?? string.Empty;
+    }
+
     private async Task<SummaryResult> SummarizeAsync(string documentText)
     {
-        var apiKey = _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"];
+        var apiKey = GetApiKey(0);
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogError("AI API Key is not configured in OpenRouterSettings:ApiKey.");
@@ -106,7 +115,7 @@ public class DocumentSummarizationService
 
         var payload = new
         {
-            model = "openai/gpt-oss-20b:free",
+            model = "openrouter/free",
             response_format = new { type = "json_object" },
             messages = new[]
             {
@@ -183,15 +192,7 @@ public class DocumentSummarizationService
 
         try
         {
-            var cleaned = generatedText.Trim();
-            if (cleaned.StartsWith("```"))
-            {
-                var firstLineBreak = cleaned.IndexOf('\n');
-                if (firstLineBreak > 0) cleaned = cleaned[(firstLineBreak + 1)..];
-                var fence = cleaned.LastIndexOf("```");
-                if (fence > 0) cleaned = cleaned[..fence];
-                cleaned = cleaned.Trim();
-            }
+            var cleaned = CleanJsonString(generatedText);
 
             using var doc = JsonDocument.Parse(cleaned);
             var root = doc.RootElement;
@@ -239,7 +240,7 @@ public class DocumentSummarizationService
 
     public async Task<string> ExtractActionItemsAsync(string documentText)
     {
-        var apiKey = _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"];
+        var apiKey = GetApiKey(1);
         if (string.IsNullOrEmpty(apiKey))
         {
             return "{\"error\": \"AI API Key is not configured.\"}";
@@ -278,7 +279,7 @@ public class DocumentSummarizationService
             using var doc = JsonDocument.Parse(responseJson);
             var generatedText = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
 
-            return generatedText?.Trim() ?? "{\"action_items\": []}";
+            return CleanJsonString(generatedText) ?? "{\"action_items\": []}";
         }
         catch (Exception ex)
         {
@@ -289,7 +290,7 @@ public class DocumentSummarizationService
 
     public async Task<string> GenerateAgendaAsync(string documentText)
     {
-        var apiKey = _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"];
+        var apiKey = GetApiKey(2);
         if (string.IsNullOrEmpty(apiKey))
         {
             return "{\"error\": \"AI API Key is not configured.\"}";
@@ -328,7 +329,7 @@ public class DocumentSummarizationService
             using var doc = JsonDocument.Parse(responseJson);
             var generatedText = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
 
-            return generatedText?.Trim() ?? "{\"agenda_items\": []}";
+            return CleanJsonString(generatedText) ?? "{\"agenda_items\": []}";
         }
         catch (Exception ex)
         {
@@ -349,7 +350,7 @@ public class DocumentSummarizationService
 
         var payload = new
         {
-            model = "openai/gpt-oss-20b:free",
+            model = "openrouter/free",
             messages = new[]
             {
                 new { role = "system", content = "You are an expert translator. Translate the following Urdu text (which may be in Urdu script or Roman Urdu) into professional English. Respond ONLY with the English translation, and nothing else." },
@@ -385,81 +386,20 @@ public class DocumentSummarizationService
             return $"[Translation Error: {ex.Message}]";
         }
     }
-    // Parses the model's JSON {"summary": "...", "actions": [...], "decisions": [...]} response,
-    // falling back to treating the whole response as plain summary text.
-    private static SummaryResult ParseSummaryResult(string? generatedText)
+    private static string? CleanJsonString(string? input)
     {
-        if (!string.IsNullOrWhiteSpace(generatedText))
+        if (string.IsNullOrWhiteSpace(input)) return input;
+        var cleaned = input.Trim();
+        if (cleaned.StartsWith("```"))
         {
-            var trimmed = generatedText.Trim();
-
-            // The model sometimes wraps JSON in a code fence.
-            if (trimmed.StartsWith("```"))
-            {
-                var start = trimmed.IndexOf('{');
-                var end = trimmed.LastIndexOf('}');
-                if (start >= 0 && end > start)
-                {
-                    trimmed = trimmed[start..(end + 1)];
-                }
-            }
-
-            try
-            {
-                using var doc = JsonDocument.Parse(trimmed);
-                var root = doc.RootElement;
-
-                var summary = root.TryGetProperty("summary", out var summaryProp)
-                    ? summaryProp.GetString()?.Trim()
-                    : null;
-
-                var actions = ReadStringArray(root, "actions");
-                var decisions = ReadStringArray(root, "decisions");
-
-                if (!string.IsNullOrWhiteSpace(summary))
-                {
-                    return new SummaryResult(summary, actions, decisions);
-                }
-            }
-            catch (JsonException)
-            {
-                // Not valid JSON — treat the raw text as the summary.
-            }
+            var firstLineBreak = cleaned.IndexOf('\n');
+            if (firstLineBreak > 0) cleaned = cleaned[(firstLineBreak + 1)..];
+            var fence = cleaned.LastIndexOf("```");
+            if (fence > 0) cleaned = cleaned[..fence];
+            cleaned = cleaned.Trim();
         }
-
-        return new SummaryResult(generatedText?.Trim() ?? "Summary could not be generated.", new List<string>(), new List<string>());
+        return cleaned;
     }
-
-    private static List<string> ReadStringArray(JsonElement root, string name)
-    {
-        var result = new List<string>();
-        if (root.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.Array)
-        {
-            foreach (var item in prop.EnumerateArray())
-            {
-                var text = item.GetString()?.Trim();
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    result.Add(text);
-                }
-            }
-        }
-        return result;
-    }
-}
-
-public sealed class SummaryResult
-{
-    public SummaryResult(string summary, List<string> actions, List<string> decisions)
-    {
-        Summary = summary;
-        Actions = actions;
-        Decisions = decisions;
-    }
-
-    public string Summary { get; }
-    public List<string> Actions { get; }
-    public List<string> Decisions { get; }
 }
 
 public class ActionItemDto

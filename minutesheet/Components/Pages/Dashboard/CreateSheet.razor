@@ -113,64 +113,18 @@ else
                     </div>
                 }
             </div>
-            <div class="d-flex flex-column" style="margin-top: 16px; gap: 8px;">
-                <div class="d-flex flex-wrap" style="gap:8px;">
-                    <button type="button" class="btn btn-outline-primary" style="font-family: 'Poppins', sans-serif;" disabled="@_generatingActionItems" @onclick="ExtractTasksAsync">
-                        @(_generatingActionItems ? "Extracting Tasks..." : "Extract Tasks")
-                    </button>
-                    <button type="button" class="btn btn-outline-success" style="font-family: 'Poppins', sans-serif;" disabled="@_generatingAgenda" @onclick="GenerateAgendaAsync">
-                        @(_generatingAgenda ? "Suggesting Agenda..." : "Suggest Agenda")
-                    </button>
-                </div>
-                
-                @if (_actionItems.Any())
-                {
-                    <div class="mt-2 p-3" style="background-color: #f8f9fa; border-radius: 6px;">
-                        <h6 style="color: #000066; font-weight: 600;">Extracted Action Items</h6>
-                        <small class="text-muted d-block mb-2">You can manually edit this list before submitting.</small>
-                        
-                        @foreach (var item in _actionItems)
-                        {
-                            <div class="d-flex gap-2 mb-2">
-                                <input type="text" class="form-control form-control-sm" @bind="item.Task" placeholder="Task" />
-                                <input type="text" class="form-control form-control-sm" @bind="item.Owner" placeholder="Owner" style="max-width: 150px;" />
-                                <input type="text" class="form-control form-control-sm" @bind="item.Deadline" placeholder="Deadline" style="max-width: 150px;" />
-                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _actionItems.Remove(item)">&times;</button>
-                            </div>
-                        }
-                        <button type="button" class="btn btn-sm btn-outline-secondary mt-1" @onclick="() => _actionItems.Add(new minutesheet.Services.ActionItemDto())">+ Add Item</button>
-                    </div>
-                }
-                
-                @if (_agendaItems.Any())
-                {
-                    <div class="mt-2 p-3" style="background-color: #f8f9fa; border-radius: 6px;">
-                        <h6 style="color: #000066; font-weight: 600;">Suggested Next-Meeting Agenda</h6>
-                        <small class="text-muted d-block mb-2">You can manually edit this agenda before submitting.</small>
-                        
-                        @foreach (var item in _agendaItems)
-                        {
-                            <div class="d-flex gap-2 mb-2">
-                                <input type="text" class="form-control form-control-sm" @bind="item.Topic" placeholder="Topic" />
-                                <input type="text" class="form-control form-control-sm" @bind="item.Owner" placeholder="Owner" style="max-width: 150px;" />
-                                <input type="text" class="form-control form-control-sm" @bind="item.TimeBox" placeholder="Time box (e.g. 10 mins)" style="max-width: 150px;" />
-                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _agendaItems.Remove(item)">&times;</button>
-                            </div>
-                        }
-                        <button type="button" class="btn btn-sm btn-outline-secondary mt-1" @onclick="() => _agendaItems.Add(new minutesheet.Services.AgendaItemDto())">+ Add Agenda Item</button>
-                    </div>
-                }
-            </div>
+
         </div>
 
         <div class="content-card">
-            <div class="card-eyebrow" style="margin-bottom:12px;">AI Summary</div>
+            <div class="card-eyebrow" style="margin-bottom:12px;">AI Insights</div>
             <div class="d-flex flex-column" style="gap:10px;">
-                <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingSummary" @onclick="GenerateSummaryAsync">
-                    @(_generatingSummary ? "Generating Summary..." : "Generate Summary")
+                <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingInsights" @onclick="GenerateAllAiInsightsAsync">
+                    @(_generatingInsights ? "Processing AI Insights..." : "Generate AI Insights")
                 </button>
                 @if (!string.IsNullOrEmpty(_summary))
                 {
+                    <div class="card-eyebrow" style="margin-top:8px;">Meeting Summary</div>
                     <div class="form-control" style="font-family: 'Poppins', sans-serif; font-size: 14px; white-space: pre-wrap; min-height: 120px; height: auto; overflow: hidden;">@_summary</div>
                     <div class="d-flex flex-wrap" style="gap:8px;">
                         <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadDocxAsync" disabled="@_downloading">
@@ -306,44 +260,57 @@ else
                 <text>Approvers are notified by email as soon as you submit. Review steps require a comment before moving on; approval steps don't.</text>
             }
         </div>
-        <div class="content-card">
-            <div class="card-eyebrow" style="margin-bottom:12px;">Actions &amp; Decisions</div>
-            @if (_actions.Count > 0 || _decisions.Count > 0)
-            {
-                <div style="display:grid;gap:10px;font-family:'Poppins',sans-serif;">
-                    @if (_actions.Count > 0)
-                    {
-                        <div style="background:#f0f4ff;border:1px solid #d3e0ff;border-left:4px solid #000066;border-radius:6px;padding:10px 14px;">
-                            <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#000066;margin-bottom:6px;font-size:13px;">
-                                <span style="width:8px;height:8px;border-radius:50%;background:#000066;display:inline-block;"></span>
-                                Actions
+        @if (_actionItems.Any() || _agendaItems.Any())
+        {
+            <div class="content-card d-flex flex-column" style="gap: 16px;">
+                @if (_actionItems.Any())
+                {
+                    <div>
+                        <div class="card-eyebrow" style="margin-bottom:6px; color:#000066;">Extracted Action Items</div>
+                        <small class="text-muted d-block mb-2" style="font-size: 12px;">You can manually edit this list before submitting.</small>
+                        
+                        @foreach (var item in _actionItems)
+                        {
+                            <div class="d-flex flex-column gap-1 mb-3" style="background:#f8f9fa; padding:10px; border-radius:6px; border: 1px solid #e2e8f0;">
+                                <input type="text" class="form-control form-control-sm" @bind="item.Task" placeholder="Task" />
+                                <div class="d-flex gap-2">
+                                    <input type="text" class="form-control form-control-sm" @bind="item.Owner" placeholder="Owner" />
+                                    <input type="text" class="form-control form-control-sm" @bind="item.Deadline" placeholder="Deadline" />
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _actionItems.Remove(item)">&times;</button>
+                                </div>
                             </div>
-                            <ul style="margin:0;padding-left:18px;font-size:13px;">
-                                @foreach (var item in _actions)
-                                {
-                                    <li style="margin-bottom:3px;">@item</li>
-                                }
-                            </ul>
-                        </div>
-                    }
-                    @if (_decisions.Count > 0)
-                    {
-                        <div style="background:#f2faf7;border:1px solid #d2ece3;border-left:4px solid #1a8a5a;border-radius:6px;padding:10px 14px;">
-                            <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#1a8a5a;margin-bottom:6px;font-size:13px;">
-                                <span style="width:8px;height:8px;border-radius:50%;background:#1a8a5a;display:inline-block;"></span>
-                                Decisions
+                        }
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" @onclick="() => _actionItems.Add(new minutesheet.Services.ActionItemDto())">+ Add Item</button>
+                    </div>
+                }
+
+                @if (_actionItems.Any() && _agendaItems.Any())
+                {
+                    <hr style="margin: 0; border-color: #e2e8f0;" />
+                }
+
+                @if (_agendaItems.Any())
+                {
+                    <div>
+                        <div class="card-eyebrow" style="margin-bottom:6px; color:#000066;">Suggested Next-Meeting Agenda</div>
+                        <small class="text-muted d-block mb-2" style="font-size: 12px;">You can manually edit this agenda before submitting.</small>
+                        
+                        @foreach (var item in _agendaItems)
+                        {
+                            <div class="d-flex flex-column gap-1 mb-3" style="background:#f8f9fa; padding:10px; border-radius:6px; border: 1px solid #e2e8f0;">
+                                <input type="text" class="form-control form-control-sm" @bind="item.Topic" placeholder="Topic" />
+                                <div class="d-flex gap-2">
+                                    <input type="text" class="form-control form-control-sm" @bind="item.Owner" placeholder="Owner" />
+                                    <input type="text" class="form-control form-control-sm" @bind="item.TimeBox" placeholder="Time box" />
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _agendaItems.Remove(item)">&times;</button>
+                                </div>
                             </div>
-                            <ul style="margin:0;padding-left:18px;font-size:13px;">
-                                @foreach (var item in _decisions)
-                                {
-                                    <li style="margin-bottom:3px;">@item</li>
-                                }
-                            </ul>
-                        </div>
-                    }
-                </div>
-            }
-        </div>
+                        }
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" @onclick="() => _agendaItems.Add(new minutesheet.Services.AgendaItemDto())">+ Add Agenda Item</button>
+                    </div>
+                }
+            </div>
+        }
     </div>
 </div>
 }
@@ -369,12 +336,10 @@ else
     private string? _summary;
     private List<string> _actions = new();
     private List<string> _decisions = new();
-    private bool _generatingSummary;
     private bool _downloading;
     private List<minutesheet.Services.ActionItemDto> _actionItems = new();
-    private bool _generatingActionItems;
     private List<minutesheet.Services.AgendaItemDto> _agendaItems = new();
-    private bool _generatingAgenda;
+    private bool _generatingInsights;
 
     private SheetCategory _category = SheetCategory.Financial;
     private bool _isConfidential;
@@ -384,7 +349,6 @@ else
     private IBrowserFile? _selectedFile;
     private string? _error;
     private bool _saving;
-    private bool _downloading;
     private DotNetObjectReference<CreateSheet>? _objRef;
     private ElementReference _dictateBtn;
     private string _dictationLanguage = "en-US";
@@ -840,10 +804,10 @@ else
         return (parts[0][..1] + parts[^1][..1]).ToUpperInvariant();
     }
 
-    private async Task GenerateSummaryAsync()
+    private async Task GenerateAllAiInsightsAsync()
     {
         _error = null;
-        _generatingSummary = true;
+        _generatingInsights = true;
         try
         {
             var authState = await AuthState;
@@ -863,8 +827,10 @@ else
             var creatorEmpNo = user.EmployeeNo ?? "N/A";
 
             var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
-            
-            var result = await SummarizationService.GenerateSummaryAsync(
+            var plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
+
+            // Start tasks in parallel
+            var summaryTask = SummarizationService.GenerateSummaryAsync(
                 _category.ToString(), 
                 creatorName, 
                 creatorDesignation, 
@@ -872,23 +838,59 @@ else
                 creatorEmpNo, 
                 descriptionHtml, 
                 _selectedFile);
+            var actionItemsTask = SummarizationService.ExtractActionItemsAsync(plainText);
+            var agendaTask = SummarizationService.GenerateAgendaAsync(plainText);
 
+            // Await all concurrently
+            await Task.WhenAll(summaryTask, actionItemsTask, agendaTask);
+
+            // 1. Assign Summary
+            var result = summaryTask.Result;
             _summary = result.Summary;
             _actions = result.Actions;
             _decisions = result.Decisions;
 
-            ToastService.ShowSuccess("Summary generated for your minute sheet.", "Summary ready");
+            // 2. Assign Tasks
+            try
+            {
+                var taskResultJson = actionItemsTask.Result;
+                var taskResponse = System.Text.Json.JsonSerializer.Deserialize<minutesheet.Services.ActionItemsResponseDto>(taskResultJson);
+                if (taskResponse?.ActionItems != null)
+                {
+                    _actionItems = taskResponse.ActionItems;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error parsing action items: {ex.Message}");
+            }
+
+            // 3. Assign Agenda
+            try
+            {
+                var agendaResultJson = agendaTask.Result;
+                var agendaResponse = System.Text.Json.JsonSerializer.Deserialize<minutesheet.Services.AgendaResponseDto>(agendaResultJson);
+                if (agendaResponse?.AgendaItems != null)
+                {
+                    _agendaItems = agendaResponse.AgendaItems;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error parsing agenda items: {ex.Message}");
+            }
+
+            ToastService.ShowSuccess("AI Insights generated successfully.", "Insights ready");
         }
         catch (Exception ex)
         {
-            ToastService.ShowError($"Failed to generate summary: {ex.Message}", "Error");
+            ToastService.ShowError($"Failed to generate insights: {ex.Message}", "Error");
         }
         finally
         {
-            _generatingSummary = false;
+            _generatingInsights = false;
         }
     }
-
     private async Task DownloadDocxAsync() => await DownloadSummaryAsync("docx");
     private async Task DownloadDocAsync() => await DownloadSummaryAsync("doc");
     private async Task DownloadPdfAsync() => await DownloadSummaryAsync("pdf");
@@ -964,133 +966,6 @@ else
         html = System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", " ");
         html = System.Net.WebUtility.HtmlDecode(html);
         return System.Text.RegularExpressions.Regex.Replace(html, @"[ \t]{2,}", " ").Trim();
-    }
-
-    private async Task ExtractTasksAsync()
-    {
-        _error = null;
-        _generatingActionItems = true;
-        try
-        {
-            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
-            string plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
-            
-            var resultJson = await SummarizationService.ExtractActionItemsAsync(plainText);
-            
-            var response = System.Text.Json.JsonSerializer.Deserialize<minutesheet.Services.ActionItemsResponseDto>(resultJson);
-            if (response?.ActionItems != null)
-            {
-                _actionItems = response.ActionItems;
-            }
-        }
-        catch (Exception ex)
-        {
-            _error = $"Failed to extract tasks: {ex.Message}";
-        }
-        finally
-        {
-            _generatingActionItems = false;
-        }
-    }
-
-    private async Task GenerateAgendaAsync()
-    {
-        _error = null;
-        _generatingAgenda = true;
-        try
-        {
-            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
-            string plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
-            
-            var resultJson = await SummarizationService.GenerateAgendaAsync(plainText);
-            
-            var response = System.Text.Json.JsonSerializer.Deserialize<minutesheet.Services.AgendaResponseDto>(resultJson);
-            if (response?.AgendaItems != null)
-            {
-                _agendaItems = response.AgendaItems;
-            }
-        }
-        catch (Exception ex)
-        {
-            _error = $"Failed to suggest agenda: {ex.Message}";
-        }
-        finally
-        {
-            _generatingAgenda = false;
-        }
-    }
-    private minutesheet.Services.SheetExporter.ExportContent CreateExportContent(string descriptionHtml)
-    {
-        var title = "Minute Sheet";
-        var catStr = _category.ToString();
-        var confStr = _isConfidential ? "Confidential" : "Standard";
-        var dateStr = DateTime.Now.ToString("dd MMM yyyy");
-        var preparedBy = _creator?.FullName ?? "Unknown";
-        
-        string plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
-        var summary = _summary ?? "";
-        
-        return new minutesheet.Services.SheetExporter.ExportContent(title, catStr, confStr, dateStr, preparedBy, plainText, summary);
-    }
-
-    private async Task DownloadDocxAsync()
-    {
-        _downloading = true;
-        try
-        {
-            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
-            var content = CreateExportContent(descriptionHtml);
-            var bytes = SheetExporter.BuildDocx(content);
-            await JS.InvokeVoidAsync("downloadFileFromBytes", "Draft.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", Convert.ToBase64String(bytes));
-        }
-        catch (Exception ex)
-        {
-            ToastService.ShowError($"Export failed: {ex.Message}");
-        }
-        finally
-        {
-            _downloading = false;
-        }
-    }
-
-    private async Task DownloadDocAsync()
-    {
-        _downloading = true;
-        try
-        {
-            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
-            var content = CreateExportContent(descriptionHtml);
-            var bytes = SheetExporter.BuildDoc(content);
-            await JS.InvokeVoidAsync("downloadFileFromBytes", "Draft.doc", "application/msword", Convert.ToBase64String(bytes));
-        }
-        catch (Exception ex)
-        {
-            ToastService.ShowError($"Export failed: {ex.Message}");
-        }
-        finally
-        {
-            _downloading = false;
-        }
-    }
-
-    private async Task DownloadPdfAsync()
-    {
-        _downloading = true;
-        try
-        {
-            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
-            var content = CreateExportContent(descriptionHtml);
-            var bytes = SheetExporter.BuildPdf(content);
-            await JS.InvokeVoidAsync("downloadFileFromBytes", "Draft.pdf", "application/pdf", Convert.ToBase64String(bytes));
-        }
-        catch (Exception ex)
-        {
-            ToastService.ShowError($"Export failed: {ex.Message}");
-        }
-        finally
-        {
-            _downloading = false;
-        }
     }
 
     private async Task HandleDictation()
