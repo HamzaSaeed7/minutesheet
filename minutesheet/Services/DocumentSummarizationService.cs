@@ -169,6 +169,47 @@ public class DocumentSummarizationService
         }
     }
 
+    private SummaryResult ParseSummaryResult(string? generatedText)
+    {
+        if (string.IsNullOrWhiteSpace(generatedText))
+        {
+            return new SummaryResult("No summary generated.", new List<string>(), new List<string>());
+        }
+
+        try
+        {
+            using var doc = JsonDocument.Parse(generatedText.Trim());
+            var root = doc.RootElement;
+
+            var summary = root.TryGetProperty("summary", out var summaryProp) ? summaryProp.GetString() : "";
+            var actions = new List<string>();
+            var decisions = new List<string>();
+
+            if (root.TryGetProperty("actions", out var actionsProp) && actionsProp.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in actionsProp.EnumerateArray())
+                {
+                    actions.Add(item.GetString() ?? "");
+                }
+            }
+
+            if (root.TryGetProperty("decisions", out var decisionsProp) && decisionsProp.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var item in decisionsProp.EnumerateArray())
+                {
+                    decisions.Add(item.GetString() ?? "");
+                }
+            }
+
+            return new SummaryResult(summary ?? "", actions, decisions);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to parse AI summary JSON");
+            return new SummaryResult(generatedText, new List<string>(), new List<string>());
+        }
+    }
+
     public async Task<string> ExtractActionItemsAsync(string documentText)
     {
         var apiKey = _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"];
@@ -343,6 +384,20 @@ public sealed class SummaryResult
     public string Summary { get; }
     public List<string> Actions { get; }
     public List<string> Decisions { get; }
+}
+
+public class SummaryResult
+{
+    public SummaryResult(string summary, List<string> actions, List<string> decisions)
+    {
+        Summary = summary;
+        Actions = actions;
+        Decisions = decisions;
+    }
+
+    public string Summary { get; set; }
+    public List<string> Actions { get; set; }
+    public List<string> Decisions { get; set; }
 }
 
 public class ActionItemDto
