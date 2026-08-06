@@ -1,10 +1,10 @@
 @page "/settings"
+@rendermode InteractiveServer
 
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Identity
 @using Microsoft.EntityFrameworkCore
-@using minutesheet.Components.Account
 @using minutesheet.Components.Account.Shared
 @using minutesheet.Data
 
@@ -13,9 +13,9 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject SignInManager<ApplicationUser> SignInManager
 @inject ApplicationDbContext DbContext
-@inject IdentityUserAccessor UserAccessor
-@inject IdentityRedirectManager RedirectManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IWebHostEnvironment Env
+@inject NavigationManager NavigationManager
 @inject ILogger<Settings> Logger
 
 <PageTitle>Settings</PageTitle>
@@ -46,10 +46,10 @@
             </div>
             <div>
                 <div style="font-size:13.5px;font-weight:600;color:#1a1d2e;margin-bottom:6px;">Profile picture</div>
-                <label class="upload-btn">
+                <label class="upload-btn" for="avatar-input">
                     Upload new photo
-                    <input type="file" name="Avatar" accept=".png,.jpg,.jpeg,.webp,.gif" hidden />
                 </label>
+                <InputFile id="avatar-input" class="d-none" accept=".png,.jpg,.jpeg,.webp,.gif" OnChange="OnAvatarSelected" />
                 <div class="form-text" style="font-size:12px;">PNG, JPG, WEBP or GIF, up to 5 MB.</div>
                 @if (!string.IsNullOrEmpty(_avatarError))
                 {
@@ -173,9 +173,6 @@
     private const long MaxAvatarBytes = 5 * 1024 * 1024;
     private static readonly string[] AllowedAvatarExtensions = { ".png", ".jpg", ".jpeg", ".webp", ".gif" };
 
-    [CascadingParameter]
-    private HttpContext HttpContext { get; set; } = default!;
-
     // Two forms share this page. During a POST, Blazor SSR sets the model of the
     // form that was NOT submitted to null, so null-coalescing setters keep both
     // models non-null and prevent "EditForm requires a Model" render errors.
@@ -189,7 +186,16 @@
 
     protected override async Task OnInitializedAsync()
     {
-        _user = await UserAccessor.GetRequiredUserAsync(HttpContext);
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (authState.User.Identity?.IsAuthenticated != true)
+        {
+            NavigationManager.NavigateTo("Account/Login", forceLoad: true);
+            return;
+        }
+
+        _user = await UserManager.GetUserAsync(authState.User)
+            ?? throw new InvalidOperationException("Unable to load the current user.");
+
         _email = _user.Email;
         _originalDepartmentId = _user.DepartmentId;
         _requirePassword = await UserManager.HasPasswordAsync(_user);
@@ -198,15 +204,12 @@
         _is2faEnabled = await UserManager.GetTwoFactorEnabledAsync(_user);
         _recoveryCodesLeft = await UserManager.CountRecoveryCodesAsync(_user);
 
-        // Only seed the form on the initial GET; on a POST keep the submitted values.
-        if (HttpMethods.IsGet(HttpContext.Request.Method))
-        {
-            Input.FullName = _user.FullName;
-            Input.EmployeeNo = _user.EmployeeNo;
-            Input.Designation = _user.Designation;
-            Input.DepartmentId = _user.DepartmentId;
-            Input.PhoneNumber = _user.PhoneNumber;
-        }
+        // Seed the form once when the interactive page initializes.
+        Input.FullName = _user.FullName;
+        Input.EmployeeNo = _user.EmployeeNo;
+        Input.Designation = _user.Designation;
+        Input.DepartmentId = _user.DepartmentId;
+        Input.PhoneNumber = _user.PhoneNumber;
     }
 
     private async Task OnSaveProfileAsync()
@@ -216,12 +219,6 @@
         _user.Designation = Input.Designation;
         _user.DepartmentId = Input.DepartmentId;
         _user.PhoneNumber = Input.PhoneNumber;
-
-        // Apply a newly uploaded profile picture (if any) before persisting.
-        if (!await TrySaveAvatarAsync())
-        {
-            return; // _avatarError is shown; nothing is saved.
-        }
 
         var result = await UserManager.UpdateAsync(_user);
         if (!result.Succeeded)
@@ -237,9 +234,62 @@
             await AdjustDepartmentCountAsync(Input.DepartmentId, delta: +1);
         }
 
-        await SignInManager.RefreshSignInAsync(_user);
+        _originalDepartmentId = Input.DepartmentId;
         Logger.LogInformation("User {Email} updated their profile.", _email);
-        RedirectManager.RedirectToCurrentPageWithStatus("Your settings have been saved.", HttpContext);
+        _message = "Your settings have been saved.";
+    }
+
+    private async Task OnAvatarSelected(InputFileChangeEventArgs e)
+    {
+        _avatarError = null;
+
+        var file = e.File;
+        if (file is null || file.Size == 0)
+        {
+            return;
+        }
+
+        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
+        if (!AllowedAvatarExtensions.Contains(ext))
+        {
+            _avatarError = "Unsupported image type. Use PNG, JPG, WEBP or GIF.";
+            return;
+        }
+
+        if (file.Size > MaxAvatarBytes)
+        {
+            _avatarError = "Image exceeds the 5 MB limit.";
+            return;
+        }
+
+        var dir = Path.Combine(Env.WebRootPath, "uploads", "avatars");
+        Directory.CreateDirectory(dir);
+
+        var storedName = $"{Guid.NewGuid():N}{ext}";
+        var fullPath = Path.Combine(dir, storedName);
+
+        await using (var source = file.OpenReadStream(MaxAvatarBytes))
+        await using (var target = new FileStream(fullPath, FileMode.Create))
+        {
+            await source.CopyToAsync(target);
+        }
+
+        var previousAvatarPath = _user.AvatarPath;
+        _user.AvatarPath = $"uploads/avatars/{storedName}";
+
+        var result = await UserManager.UpdateAsync(_user);
+        if (!result.Succeeded)
+        {
+            DeleteAvatarFile(_user.AvatarPath);
+            _user.AvatarPath = previousAvatarPath;
+            _avatarError = $"Error: {string.Join(", ", result.Errors.Select(e => e.Description))}";
+            return;
+        }
+
+        DeleteAvatarFile(previousAvatarPath);
+        _avatarVersion = DateTime.UtcNow.Ticks.ToString();
+        _message = "Profile picture updated.";
+        Logger.LogInformation("User {Email} updated their profile picture.", _email);
     }
 
     private async Task OnDeleteAccountAsync()
@@ -266,7 +316,7 @@
         await SignInManager.SignOutAsync();
 
         Logger.LogInformation("User with ID '{UserId}' deleted their account.", userId);
-        RedirectManager.RedirectTo("Account/Login");
+        NavigationManager.NavigateTo("Account/Login", forceLoad: true);
     }
 
     private async Task AdjustDepartmentCountAsync(int? departmentId, int delta)
@@ -282,41 +332,6 @@
             dept.EmployeeCount = Math.Max(0, dept.EmployeeCount + delta);
             await DbContext.SaveChangesAsync();
         }
-    }
-
-    private async Task<bool> TrySaveAvatarAsync()
-    {
-        var file = HttpContext.Request.Form.Files["Avatar"];
-        if (file is null || file.Length == 0)
-        {
-            return true; // No new file selected — leave the existing picture as-is.
-        }
-
-        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
-        if (!AllowedAvatarExtensions.Contains(ext))
-        {
-            _avatarError = "Unsupported image type. Use PNG, JPG, WEBP or GIF.";
-            return false;
-        }
-        if (file.Length > MaxAvatarBytes)
-        {
-            _avatarError = "Image exceeds the 5 MB limit.";
-            return false;
-        }
-
-        var dir = Path.Combine(Env.WebRootPath, "uploads", "avatars");
-        Directory.CreateDirectory(dir);
-        var storedName = $"{Guid.NewGuid():N}{ext}";
-        var fullPath = Path.Combine(dir, storedName);
-        await using (var fs = new FileStream(fullPath, FileMode.Create))
-        {
-            await file.CopyToAsync(fs);
-        }
-
-        // Remove the previous picture so old files don't accumulate.
-        DeleteAvatarFile(_user.AvatarPath);
-        _user.AvatarPath = $"uploads/avatars/{storedName}";
-        return true;
     }
 
     private void DeleteAvatarFile(string? avatarPath)

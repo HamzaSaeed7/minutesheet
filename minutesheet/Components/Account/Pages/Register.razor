@@ -25,42 +25,43 @@
     <DataAnnotationsValidator />
     <ValidationSummary class="text-danger" role="alert" />
 
-    <div class="form-floating mb-3">
-        <InputText @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
+    <div class="auth-field">
         <label>Email</label>
+        <InputText @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
         <ValidationMessage For="() => Input.Email" class="text-danger" />
     </div>
 
-    <div class="form-floating mb-3">
-        <InputText type="password" @bind-Value="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" placeholder="password" />
+    <div class="auth-field">
         <label>Password</label>
+        <InputText type="password" @bind-Value="Input.Password" class="form-control" autocomplete="new-password" aria-required="true" placeholder="••••••••" />
         <ValidationMessage For="() => Input.Password" class="text-danger" />
     </div>
 
-    <div class="form-floating mb-3">
-        <InputText @bind-Value="Input.FullName" class="form-control" autocomplete="name" aria-required="true" placeholder="Full name" />
+    <div class="auth-field">
         <label>Name</label>
+        <InputText @bind-Value="Input.FullName" class="form-control" autocomplete="name" aria-required="true" placeholder="Full name" />
         <ValidationMessage For="() => Input.FullName" class="text-danger" />
     </div>
 
-    <div class="form-floating mb-3">
-        <InputText @bind-Value="Input.EmployeeNo" class="form-control" aria-required="true" placeholder="Employee number" />
+    <div class="auth-field">
         <label>Employee No.</label>
+        <InputText @bind-Value="Input.EmployeeNo" class="form-control" aria-required="true" placeholder="Employee number" />
         <ValidationMessage For="() => Input.EmployeeNo" class="text-danger" />
     </div>
 
-    <div class="form-floating mb-3">
+    <div class="auth-field">
+        <label>Designation</label>
         <InputSelect @bind-Value="Input.Designation" class="form-select">
             @foreach (var d in Enum.GetValues<Designation>())
             {
                 <option value="@d">@DisplayName(d)</option>
             }
         </InputSelect>
-        <label>Designation</label>
         <ValidationMessage For="() => Input.Designation" class="text-danger" />
     </div>
 
-    <div class="form-floating mb-3">
+    <div class="auth-field">
+        <label>Department</label>
         <InputSelect @bind-Value="Input.DepartmentId" class="form-select">
             <option value="">-- Select department --</option>
             @foreach (var dept in _departments)
@@ -68,14 +69,13 @@
                 <option value="@dept.Id">@dept.Name</option>
             }
         </InputSelect>
-        <label>Department</label>
         <ValidationMessage For="() => Input.DepartmentId" class="text-danger" />
     </div>
 
     <button type="submit" class="w-100 btn btn-lg btn-primary">Sign up</button>
 </EditForm>
 
-<p class="auth-footer mt-3">
+<p class="auth-footer">
     Already have an account? <a href="Account/Login">Log in</a>
 </p>
 
@@ -151,7 +151,8 @@
 
         if (sent)
         {
-            RedirectManager.RedirectTo(verifyUri);
+            RedirectManager.RedirectToWithStatus(verifyUri,
+                "Account created! Check your email for the 6-digit verification code.", HttpContext);
         }
         else
         {

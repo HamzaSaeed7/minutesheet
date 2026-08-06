@@ -7,14 +7,75 @@
 }
 else
 {
-    <div class="auth-shell">
-        <div class="auth-card">
-            <div class="auth-logo">
-                <img src="images/FFC-Logo-Blue-V3.webp" alt="Company logo" />
+    <div class="auth-page auth-splash">
+        <div class="auth-bg"></div>
+        <div class="auth-overlay"></div>
+        <div class="auth-glow"></div>
+
+        <div class="auth-wrap">
+            <div class="auth-brand">
+                <div class="auth-brand-head">
+                    <div class="auth-logo-box">
+                        <img src="images/FFC-Logo-Blue-V3.webp" alt="FFC — Partner in Prosperity" />
+                    </div>
+                    <div class="auth-brand-bars">
+                        <span></span><span></span><span></span>
+                    </div>
+                </div>
+
+                <div class="auth-badge"><span class="dot"></span>Grower Portal</div>
+
+                <h1 class="auth-headline">Partner in<br />Prosperity.</h1>
+                <p class="auth-lede" id="authLede" data-text="Manage your soil programs, nutrient plans and delivery schedules — all from one place.">Manage your soil programs, nutrient plans and delivery schedules — all from one place.</p>
+
+                <div class="auth-stats">
+                    <div class="auth-stat"><div class="n">2.4M</div><div class="k">Acres served</div></div>
+                    <div class="auth-stat-div"></div>
+                    <div class="auth-stat"><div class="n">38</div><div class="k">Years growing</div></div>
+                    <div class="auth-stat-div"></div>
+                    <div class="auth-stat"><div class="n">99.6%</div><div class="k">On-time delivery</div></div>
+                </div>
             </div>
-            @Body
+
+            <div class="auth-card">
+                @Body
+            </div>
         </div>
     </div>
+
+    <script>
+        (function () {
+            var el = document.getElementById('authLede');
+            if (!el) return;
+            var full = el.getAttribute('data-text') || el.textContent.trim();
+            var typing = true;
+            var pos = 0;
+
+            function tick() {
+                if (typing) {
+                    pos++;
+                    el.textContent = full.slice(0, pos);
+                    if (pos >= full.length) {
+                        typing = false;
+                        setTimeout(tick, 2400);
+                        return;
+                    }
+                    setTimeout(tick, 28);
+                } else {
+                    pos--;
+                    el.textContent = full.slice(0, pos);
+                    if (pos <= 0) {
+                        typing = true;
+                        setTimeout(tick, 700);
+                        return;
+                    }
+                    setTimeout(tick, 14);
+                }
+            }
+
+            setTimeout(tick, 300);
+        })();
+    </script>
 }
 
 @code {

@@ -3,9 +3,13 @@
 @using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authentication
 @using Microsoft.AspNetCore.Identity
+@using Microsoft.EntityFrameworkCore
+@using minutesheet.Components.Account
 @using minutesheet.Data
 
 @inject SignInManager<ApplicationUser> SignInManager
+@inject UserManager<ApplicationUser> UserManager
+@inject SmtpEmailSender EmailSender
 @inject ILogger<Login> Logger
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
@@ -21,19 +25,21 @@
     <DataAnnotationsValidator />
     <ValidationSummary class="text-danger" role="alert" />
 
-    <div class="form-floating mb-3">
-        <InputText @bind-Value="Input.Email" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com" />
-        <label>Email</label>
-        <ValidationMessage For="() => Input.Email" class="text-danger" />
+    <div class="auth-field">
+        <label>Email or Employee Number</label>
+        <InputText @bind-Value="Input.Identifier" class="form-control" autocomplete="username" aria-required="true" placeholder="name@example.com or employee number" />
+        <ValidationMessage For="() => Input.Identifier" class="text-danger" />
     </div>
 
-    <div class="form-floating mb-3 password-field">
-        <InputText type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="password" />
+    <div class="auth-field">
         <label>Password</label>
-        <button type="button" class="password-toggle" tabindex="-1" aria-label="Show password" onclick="minutesheetTogglePassword(this)">
-            <svg class="icon-eye" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" /><circle cx="12" cy="12" r="3" /></svg>
-            <svg class="icon-eye-off" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.8 21.8 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
-        </button>
+        <div class="password-field">
+            <InputText type="password" @bind-Value="Input.Password" class="form-control" autocomplete="current-password" aria-required="true" placeholder="••••••••" />
+            <button type="button" class="password-toggle" tabindex="-1" aria-label="Show password" onclick="minutesheetTogglePassword(this)">
+                <svg class="icon-eye" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8Z" /><circle cx="12" cy="12" r="3" /></svg>
+                <svg class="icon-eye-off" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="display:none"><path d="M17.94 17.94A10.94 10.94 0 0 1 12 20c-7 0-11-8-11-8a21.8 21.8 0 0 1 5.06-6.06M9.9 4.24A10.94 10.94 0 0 1 12 4c7 0 11 8 11 8a21.8 21.8 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" /><line x1="1" y1="1" x2="23" y2="23" /></svg>
+            </button>
+        </div>
         <ValidationMessage For="() => Input.Password" class="text-danger" />
     </div>
 
@@ -50,21 +56,18 @@
         }
     </script>
 
-    <div class="checkbox mb-3">
-        <label class="form-label">
-            <InputCheckbox @bind-Value="Input.RememberMe" class="darker-border-checkbox form-check-input" />
+    <div class="auth-remember">
+        <label>
+            <InputCheckbox @bind-Value="Input.RememberMe" />
             Remember me
         </label>
+        <a href="Account/ForgotPassword">Forgot password?</a>
     </div>
 
     <button type="submit" class="w-100 btn btn-lg btn-primary">Log in</button>
-
-    <div class="auth-links mt-3">
-        <a href="Account/ForgotPassword">Forgot your password?</a>
-    </div>
 </EditForm>
 
-<p class="auth-footer mt-3">
+<p class="auth-footer">
     New here? <a href="@(NavigationManager.GetUriWithQueryParameters("Account/Register", new Dictionary<string, object?> { ["ReturnUrl"] = ReturnUrl }))">Create an account</a>
 </p>
 
@@ -91,19 +94,34 @@
 
     public async Task LoginUser()
     {
-        // This doesn't count login failures towards account lockout
-        // To enable password failures to trigger account lockout, set lockoutOnFailure: true
-        var result = await SignInManager.PasswordSignInAsync(Input.Email, Input.Password, Input.RememberMe, lockoutOnFailure: false);
+        var identifier = Input.Identifier.Trim();
+        var user = identifier.Contains('@')
+            ? await UserManager.FindByEmailAsync(identifier)
+            : await UserManager.Users.FirstOrDefaultAsync(u => u.EmployeeNo == identifier);
+
+        if (user is null)
+        {
+            errorMessage = "Error: Invalid login attempt.";
+            return;
+        }
+
+        // Validates the password and checks lockout/confirmation without signing the
+        // user in yet — the cookie is only issued once the emailed OTP is verified.
+        var result = await SignInManager.CheckPasswordSignInAsync(user, Input.Password, lockoutOnFailure: false);
         if (result.Succeeded)
         {
-            Logger.LogInformation("User logged in.");
-            RedirectManager.RedirectTo(ReturnUrl);
-        }
-        else if (result.RequiresTwoFactor)
-        {
-            RedirectManager.RedirectTo(
-                "Account/LoginWith2fa",
-                new() { ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
+            var code = await UserManager.GenerateUserTokenAsync(user, TokenOptions.DefaultEmailProvider, "login-otp");
+            var sent = await EmailSender.SendOtpAsync(user.Email!, code);
+
+            var otpUri = NavigationManager.GetUriWithQueryParameters(
+                NavigationManager.ToAbsoluteUri("Account/LoginOtp").AbsoluteUri,
+                new Dictionary<string, object?> { ["email"] = user.Email, ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
+
+            RedirectManager.RedirectToWithStatus(otpUri,
+                sent
+                    ? "We sent a 6-digit code to your email. Enter it to finish logging in."
+                    : "Error: We couldn't send the verification email. Use \"Resend code\" on the next page.",
+                HttpContext);
         }
         else if (result.IsLockedOut)
         {
@@ -119,8 +137,8 @@
     private sealed class InputModel
     {
         [Required]
-        [EmailAddress]
-        public string Email { get; set; } = "";
+        [Display(Name = "Email or Employee Number")]
+        public string Identifier { get; set; } = "";
 
         [Required]
         [DataType(DataType.Password)]

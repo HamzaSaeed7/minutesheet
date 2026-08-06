@@ -13,6 +13,8 @@
 
 <h1 class="page-title">All Minute Sheets</h1>
 
+<ToastHost />
+
 <div class="content-card" style="max-width:none">
     @if (_sheets is null)
     {
@@ -39,6 +41,8 @@
                 @foreach (var sheet in _sheets)
                 {
                     var status = ApprovalWorkflow.StatusFor(sheet);
+                    var editable = sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending)
+                                   || sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed);
                     <tr>
                         <td>@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</td>
                         <td>
@@ -60,7 +64,13 @@
                             </div>
                         </td>
                         <td class="text-end">
-                            <a class="btn btn-sm btn-outline-primary" href="dashboard/sheet/@sheet.Token">Open</a>
+                            <div class="d-inline-flex align-items-center gap-2">
+                                @if (editable)
+                                {
+                                    <a class="btn btn-sm btn-outline-secondary" href="dashboard/sheet/@sheet.Token/edit">Edit</a>
+                                }
+                                <a class="btn btn-sm btn-outline-primary" href="dashboard/sheet/@sheet.Token">Open</a>
+                            </div>
                         </td>
                     </tr>
                 }

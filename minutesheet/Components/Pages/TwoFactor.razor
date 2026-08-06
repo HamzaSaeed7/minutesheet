@@ -8,6 +8,7 @@
 @using Microsoft.AspNetCore.Identity
 @using QRCoder
 @using minutesheet.Components.Account
+@using minutesheet.Components.Account.Shared
 @using minutesheet.Data
 
 @attribute [Authorize]
@@ -25,7 +26,7 @@
 
 @if (!string.IsNullOrEmpty(_message))
 {
-    <div style="max-width:640px;"><div class="alert alert-success">@_message</div></div>
+    <StatusMessage Message="@_message" />
 }
 
 @if (_recoveryCodes is not null)
@@ -80,7 +81,7 @@ else
 
         @if (!string.IsNullOrEmpty(_error))
         {
-            <div class="alert alert-danger">@_error</div>
+            <StatusMessage Message="@_error" />
         }
 
         <div class="d-flex flex-wrap" style="gap:24px;align-items:flex-start;margin-bottom:8px;">

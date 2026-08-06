@@ -10,7 +10,7 @@ namespace minutesheet.Data
 
         // Rich-text HTML produced by the Quill editor.
         public string DescriptionHtml { get; set; } = "";
-        
+
         public string? Summary { get; set; }
 
         // Extracted action items stored as JSON string.
@@ -26,6 +26,9 @@ namespace minutesheet.Data
         // Relative path under wwwroot where the file is stored (e.g. uploads/{guid}.pdf).
         [MaxLength(400)]
         public string? AttachmentStoredPath { get; set; }
+
+        // When true, only the creator, listed approvers and admins can view the sheet.
+        public bool IsConfidential { get; set; }
 
         [Required]
         public string CreatedByUserId { get; set; } = "";

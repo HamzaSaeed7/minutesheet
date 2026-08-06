@@ -10,6 +10,7 @@
 @using Microsoft.EntityFrameworkCore
 @using minutesheet.Data
 @using minutesheet.Components.Account
+@using minutesheet.Services
 
 @attribute [Authorize]
 
@@ -20,8 +21,11 @@
 @inject NavigationManager NavigationManager
 @inject EmailQueue EmailQueue
 @inject minutesheet.Services.DocumentSummarizationService SummarizationService
+@inject minutesheet.Services.ToastService ToastService
 
 <PageTitle>@(_isEdit ? "Edit Minute Sheet" : "Create Minute Sheet")</PageTitle>
+
+<ToastHost />
 
 @if (_isEdit && _loading)
 {
@@ -55,7 +59,32 @@ else
         </div>
 
         <div class="content-card">
-            <div class="card-eyebrow" style="margin-bottom:10px;">Description</div>
+            <div class="card-eyebrow" style="margin-bottom:10px;">Confidentiality</div>
+            <div class="seg-tabs">
+                <button type="button" class="seg-tab @(!_isConfidential ? "active" : "")" @onclick="() => _isConfidential = false">Non-Confidential</button>
+                <button type="button" class="seg-tab @(_isConfidential ? "active" : "")" @onclick="() => _isConfidential = true">Confidential</button>
+            </div>
+            <div style="font-size:12.5px;color:#9296ab;margin-top:10px;">
+                Non-confidential sheets can be viewed by every user. Confidential sheets can only be viewed by you, the approvers listed below, and admins.
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="d-flex align-items-center justify-content-between" style="margin-bottom:10px;">
+                <div class="card-eyebrow">Description</div>
+                <div class="d-flex align-items-center" style="gap:8px;">
+                    <select id="dictateLang" class="form-select form-select-sm" style="width:auto;" aria-label="Dictation language">
+                        <option value="en-US">English</option>
+                        <option value="ur-PK">Urdu</option>
+                    </select>
+                    <button type="button" class="dictate-btn"
+                            onclick="quillInterop.toggleDictation('editor', this, document.getElementById('dictateLang').value)"
+                            aria-label="Dictate description" title="Dictate with your voice">
+                        <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
+                        <span class="dictate-label">Dictate</span>
+                    </button>
+                </div>
+            </div>
             <div id="editor" style="min-height:180px;"></div>
         </div>
 
@@ -172,6 +201,12 @@ else
             }
             else
             {
+                <datalist id="approverEmailOptions">
+                    @foreach (var email in _approverEmails)
+                    {
+                        <option value="@email" />
+                    }
+                </datalist>
                 <div class="d-flex flex-column" style="gap:10px;">
                     @for (int i = 0; i < _rows.Count; i++)
                     {
@@ -181,7 +216,7 @@ else
                             <div class="wf-num">@(i + 1)</div>
                             @if (isLast)
                             {
-                                <span class="wf-chip approve">Approve</span>
+                                <span class="wf-chip approve">Approver</span>
                             }
                             else
                             {
@@ -190,13 +225,7 @@ else
                                     <option value="@ApprovalAction.Approve">Approve</option>
                                 </select>
                             }
-                            <select class="form-select form-select-sm" style="flex:1;" @bind="row.ApproverEmail">
-                                <option value="">-- select approver --</option>
-                                @foreach (var email in _approverEmails)
-                                {
-                                    <option value="@email">@email</option>
-                                }
-                            </select>
+                            <input list="approverEmailOptions" class="form-control form-control-sm wf-approver" placeholder="-- select approver --" @bind="row.ApproverEmail" @bind:event="oninput" />
                             @if (_rows.Count > 1)
                             {
                                 <button type="button" class="wf-remove" @onclick="() => RemoveRow(row)">&times;</button>
@@ -264,6 +293,64 @@ else
                 <text>Approvers are notified by email as soon as you submit. Review steps require a comment before moving on; approval steps don't.</text>
             }
         </div>
+        <div class="content-card">
+            <div class="card-eyebrow" style="margin-bottom:12px;">AI Summary</div>
+            <div class="d-flex flex-column" style="gap:10px;">
+                <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingSummary" @onclick="GenerateSummaryAsync">
+                    @(_generatingSummary ? "Generating Summary..." : "Generate Summary")
+                </button>
+                @if (!string.IsNullOrEmpty(_summary))
+                {
+                    <textarea class="form-control" rows="6" readonly style="font-family: 'Poppins', sans-serif; font-size: 14px; resize: vertical;">@_summary</textarea>
+                    @if (_actions.Count > 0 || _decisions.Count > 0)
+                    {
+                        <div style="display:grid;gap:10px;font-family:'Poppins',sans-serif;">
+                            @if (_actions.Count > 0)
+                            {
+                                <div style="background:#f0f4ff;border:1px solid #d3e0ff;border-left:4px solid #000066;border-radius:6px;padding:10px 14px;">
+                                    <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#000066;margin-bottom:6px;font-size:13px;">
+                                        <span style="width:8px;height:8px;border-radius:50%;background:#000066;display:inline-block;"></span>
+                                        Actions
+                                    </div>
+                                    <ul style="margin:0;padding-left:18px;font-size:13px;">
+                                        @foreach (var item in _actions)
+                                        {
+                                            <li style="margin-bottom:3px;">@item</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                            @if (_decisions.Count > 0)
+                            {
+                                <div style="background:#f2faf7;border:1px solid #d2ece3;border-left:4px solid #1a8a5a;border-radius:6px;padding:10px 14px;">
+                                    <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#1a8a5a;margin-bottom:6px;font-size:13px;">
+                                        <span style="width:8px;height:8px;border-radius:50%;background:#1a8a5a;display:inline-block;"></span>
+                                        Decisions
+                                    </div>
+                                    <ul style="margin:0;padding-left:18px;font-size:13px;">
+                                        @foreach (var item in _decisions)
+                                        {
+                                            <li style="margin-bottom:3px;">@item</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                        </div>
+                    }
+                    <div class="d-flex flex-wrap" style="gap:8px;">
+                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadDocxAsync" disabled="@_downloading">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Word (.docx)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadDocAsync" disabled="@_downloading">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Word (.doc)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadPdfAsync" disabled="@_downloading">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>PDF
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
     </div>
 </div>
 }
@@ -287,6 +374,8 @@ else
     private string? _existingAttachmentPath;
     private string _initialDescriptionHtml = "";
     private string? _summary;
+    private List<string> _actions = new();
+    private List<string> _decisions = new();
     private bool _generatingSummary;
     private List<minutesheet.Services.ActionItemDto> _actionItems = new();
     private bool _generatingActionItems;
@@ -294,6 +383,7 @@ else
     private bool _generatingAgenda;
 
     private SheetCategory _category = SheetCategory.Financial;
+    private bool _isConfidential;
     private readonly List<ApprovalRow> _rows = new() { new ApprovalRow { Action = ApprovalAction.Review } };
     private List<string> _approverEmails = new();
     private ApplicationUser? _creator;
@@ -315,6 +405,12 @@ else
 
         var authState = await AuthState;
         var userId = UserManager.GetUserId(authState.User);
+        var isAdmin = authState.User.IsInRole(Roles.Admin);
+
+        // Whose details show in the "Prepared by" card. Defaults to the current
+        // user (create flow); in edit mode it's the sheet's actual creator, so an
+        // admin editing another user's sheet still sees the real preparer.
+        var creatorId = userId;
 
         if (_isEdit)
         {
@@ -327,7 +423,7 @@ else
                 _canEdit = false;
                 _error = "This minute sheet could not be found.";
             }
-            else if (sheet.CreatedByUserId != userId)
+            else if (sheet.CreatedByUserId != userId && !isAdmin)
             {
                 _canEdit = false;
                 _error = "You don't have access to edit this minute sheet.";
@@ -349,7 +445,9 @@ else
                 }
                 else
                 {
+                    creatorId = sheet.CreatedByUserId;
                     _category = sheet.Category;
+                    _isConfidential = sheet.IsConfidential;
                     _initialDescriptionHtml = sheet.DescriptionHtml;
                     _existingAttachmentName = sheet.AttachmentFileName;
                     _existingAttachmentPath = sheet.AttachmentStoredPath;
@@ -379,11 +477,11 @@ else
             }
         }
 
-        if (userId is not null)
+        if (creatorId is not null)
         {
             _creator = await DbContext.Users
                 .Include(u => u.Department)
-                .FirstOrDefaultAsync(u => u.Id == userId);
+                .FirstOrDefaultAsync(u => u.Id == creatorId);
         }
 
         _loading = false;
@@ -440,13 +538,13 @@ else
         var ext = Path.GetExtension(file.Name).ToLowerInvariant();
         if (!AllowedExtensions.Contains(ext))
         {
-            _error = "Only PDF and Word (.doc/.docx) files are allowed.";
+            ToastService.ShowError("Only PDF and Word (.doc/.docx) files are allowed.", "Unsupported file");
             _selectedFile = null;
             return;
         }
         if (file.Size > MaxFileSize)
         {
-            _error = "File exceeds the 10 MB limit.";
+            ToastService.ShowError("File exceeds the 10 MB limit.", "File too large");
             _selectedFile = null;
             return;
         }
@@ -463,13 +561,13 @@ else
 
             if (string.IsNullOrWhiteSpace(descriptionHtml))
             {
-                _error = "Please enter a description.";
+                ToastService.ShowError("Please enter a description.", "Missing description");
                 return;
             }
 
             if (!_workflowLocked && _rows.Any(r => string.IsNullOrWhiteSpace(r.ApproverEmail)))
             {
-                _error = "Please select an approver email for every approval row.";
+                ToastService.ShowError("Please select an approver email for every approval row.", "Missing approver");
                 return;
             }
 
@@ -477,9 +575,10 @@ else
             var user = await UserManager.GetUserAsync(authState.User);
             if (user is null)
             {
-                _error = "Your session has expired. Please log in again.";
+                ToastService.ShowError("Your session has expired. Please log in again.", "Session expired");
                 return;
             }
+            var isAdmin = authState.User.IsInRole(Roles.Admin);
 
             string? storedPath = null;
             string? originalName = null;
@@ -511,9 +610,9 @@ else
                 var allPending = sheet is not null && sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending);
                 var hasReviews = sheet is not null && sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed);
 
-                if (sheet is null || sheet.CreatedByUserId != user.Id || !(allPending || hasReviews))
+                if (sheet is null || (sheet.CreatedByUserId != user.Id && !isAdmin) || !(allPending || hasReviews))
                 {
-                    _error = "This minute sheet can no longer be edited.";
+                    ToastService.ShowError("This minute sheet can no longer be edited.", "Cannot edit");
                     return;
                 }
 
@@ -532,6 +631,7 @@ else
                 }
 
                 sheet.Category = _category;
+                sheet.IsConfidential = _isConfidential;
                 sheet.DescriptionHtml = descriptionHtml;
                 sheet.Summary = _summary;
                 sheet.ActionItems = _actionItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_actionItems) : null;
@@ -583,13 +683,15 @@ else
                     }
                 }
 
-                NavigationManager.NavigateTo($"dashboard/sheet/{sheetToken}");
+                ToastService.ShowSuccess("Your minute sheet changes were saved and approvers notified.", "Changes saved");
+                NavigationManager.NavigateTo($"/dashboard/sheet/{sheetToken}", forceLoad: false);
             }
             else
             {
                 var sheet = new MinuteSheet
                 {
                     Category = _category,
+                    IsConfidential = _isConfidential,
                     DescriptionHtml = descriptionHtml,
                     Summary = _summary,
                     ActionItems = _actionItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_actionItems) : null,
@@ -640,12 +742,13 @@ else
                         link));
                 }
 
-                NavigationManager.NavigateTo("dashboard/history");
+                ToastService.ShowSuccess("Your minute sheet was submitted successfully and approvers have been notified.", "Submitted");
+                NavigationManager.NavigateTo("/dashboard/history", forceLoad: false);
             }
         }
         catch (Exception ex)
         {
-            _error = $"Something went wrong: {ex.Message}";
+            ToastService.ShowError($"Something went wrong: {ex.Message}", "Error");
         }
         finally
         {
@@ -677,6 +780,51 @@ else
         return attr?.Name ?? d.ToString();
     }
 
+    private static (List<string> Actions, List<string> Decisions) ParseActionsDecisions(string? json)
+    {
+        var actions = new List<string>();
+        var decisions = new List<string>();
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return (actions, decisions);
+        }
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("actions", out var a) && a.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in a.EnumerateArray())
+                {
+                    var text = item.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text)) actions.Add(text);
+                }
+            }
+            if (root.TryGetProperty("decisions", out var d) && d.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in d.EnumerateArray())
+                {
+                    var text = item.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text)) decisions.Add(text);
+                }
+            }
+        }
+        catch
+        {
+            // Ignore malformed JSON.
+        }
+        return (actions, decisions);
+    }
+
+    private static string? SerializeActionsDecisions(List<string> actions, List<string> decisions)
+    {
+        if (actions.Count == 0 && decisions.Count == 0)
+        {
+            return null;
+        }
+        return System.Text.Json.JsonSerializer.Serialize(new { actions, decisions });
+    }
+
     private static string Initials(string? fullName, string? email)
     {
         var source = !string.IsNullOrWhiteSpace(fullName) ? fullName : email ?? "";
@@ -706,7 +854,7 @@ else
 
             if (user == null)
             {
-                _error = "Could not load current user.";
+                ToastService.ShowError("Could not load current user.", "Error");
                 return;
             }
 
@@ -717,7 +865,7 @@ else
 
             var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
             
-            _summary = await SummarizationService.GenerateSummaryAsync(
+            var result = await SummarizationService.GenerateSummaryAsync(
                 _category.ToString(), 
                 creatorName, 
                 creatorDesignation, 
@@ -725,10 +873,16 @@ else
                 creatorEmpNo, 
                 descriptionHtml, 
                 _selectedFile);
+
+            _summary = result.Summary;
+            _actions = result.Actions;
+            _decisions = result.Decisions;
+
+            ToastService.ShowSuccess("Summary generated for your minute sheet.", "Summary ready");
         }
         catch (Exception ex)
         {
-            _error = $"Failed to generate summary: {ex.Message}";
+            ToastService.ShowError($"Failed to generate summary: {ex.Message}", "Error");
         }
         finally
         {

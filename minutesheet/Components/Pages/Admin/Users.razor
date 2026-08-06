@@ -11,8 +11,11 @@
 
 @inject UserManager<ApplicationUser> UserManager
 @inject AuthenticationStateProvider AuthStateProvider
+@inject minutesheet.Services.ToastService ToastService
 
 <PageTitle>Manage Users</PageTitle>
+
+<ToastHost />
 
 <div class="d-flex align-items-center justify-content-between mb-3">
     <h1 class="page-title mb-0">Manage Users</h1>
@@ -30,10 +33,6 @@
     }
     else
     {
-        @if (_message is not null)
-        {
-            <div class="alert alert-info py-2">@_message</div>
-        }
         <table class="table table-hover align-middle">
             <thead>
                 <tr>
@@ -57,24 +56,27 @@
                             </span>
                         </td>
                         <td class="text-end">
-                            @if (row.IsSelf)
-                            {
-                                <span class="text-muted" style="font-size:12.5px;">You</span>
-                            }
-                            else if (row.IsAdmin)
-                            {
-                                <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_busy"
-                                        @onclick="() => SetRole(row, makeAdmin: false)">
-                                    Make Employee
-                                </button>
-                            }
-                            else
-                            {
-                                <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_busy"
-                                        @onclick="() => SetRole(row, makeAdmin: true)">
-                                    Make Admin
-                                </button>
-                            }
+                            <div class="d-inline-flex align-items-center gap-2">
+                                <a class="btn btn-sm btn-outline-secondary" href="@($"admin/users/{row.User.Id}/edit")">Edit</a>
+                                @if (row.IsSelf)
+                                {
+                                    <span class="text-muted" style="font-size:12.5px;">You</span>
+                                }
+                                else if (row.IsAdmin)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_busy"
+                                            @onclick="() => SetRole(row, makeAdmin: false)">
+                                        Make Employee
+                                    </button>
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_busy"
+                                            @onclick="() => SetRole(row, makeAdmin: true)">
+                                        Make Admin
+                                    </button>
+                                }
+                            </div>
                         </td>
                     </tr>
                 }
@@ -87,7 +89,6 @@
     private List<UserRow>? _rows;
     private string? _currentUserId;
     private bool _busy;
-    private string? _message;
 
     private sealed class UserRow
     {
@@ -123,7 +124,6 @@
     {
         if (row.IsSelf) return; // guard against self-lockout
         _busy = true;
-        _message = null;
 
         if (makeAdmin)
         {
@@ -140,7 +140,7 @@
         await UserManager.UpdateSecurityStampAsync(row.User);
 
         row.IsAdmin = makeAdmin;
-        _message = $"{row.User.Email} is now {(makeAdmin ? Roles.Admin : Roles.Employee)}.";
+        ToastService.ShowSuccess($"{row.User.Email} is now {(makeAdmin ? Roles.Admin : Roles.Employee)}.", "Role updated");
         _busy = false;
     }
 }

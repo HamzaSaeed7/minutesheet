@@ -44,8 +44,15 @@ builder.Services.AddSingleton<EmailQueue>();
 builder.Services.AddHostedService<EmailBackgroundService>();
 
 builder.Services.AddScoped<minutesheet.Services.DocumentSummarizationService>();
+builder.Services.AddScoped<minutesheet.Services.ToastService>();
 
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await dbContext.Database.MigrateAsync();
+}
 
 // Seed roles (Admin/Employee) and the bootstrap admin account on startup.
 await DbSeeder.SeedAsync(app.Services);

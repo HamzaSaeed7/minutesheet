@@ -17,8 +17,11 @@
 @inject NavigationManager NavigationManager
 @inject IWebHostEnvironment Env
 @inject IJSRuntime JS
+@inject minutesheet.Services.ToastService ToastService
 
 <PageTitle>Minute Sheet</PageTitle>
+
+<ToastHost />
 
 @if (_loading)
 {
@@ -65,6 +68,10 @@ else
             @if (_isCreator)
             {
                 <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="DeleteSheet">Delete</button>
+            }
+            @if (_sheet.IsConfidential)
+            {
+                <span class="badge bg-danger" style="font-size:13px;padding:6px 16px;" title="Only the creator, listed approvers and admins can view this sheet.">Confidential</span>
             }
             <span class="badge @SheetStatusClass(_currentStatus)" style="font-size:13px;padding:6px 16px;">@_currentStatus</span>
         </div>
@@ -280,6 +287,7 @@ else
     private bool _loading = true;
     private bool _canView;
     private bool _isCreator;
+    private bool _isAdmin;
     private bool _canEdit;
     private string? _error;
     private bool _busy;
@@ -301,6 +309,7 @@ else
 
         var authState = await AuthState;
         _me = await UserManager.GetUserAsync(authState.User);
+        _isAdmin = authState.User.IsInRole(Roles.Admin);
         await LoadAsync();
         _loading = false;
     }
@@ -329,12 +338,15 @@ else
 
         _isCreator = _sheet.CreatedByUserId == _me.Id;
         // Full edit while all steps are pending; limited edit (description +
-        // attachment) once there are reviews to resolve.
-        _canEdit = _isCreator && (_sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending)
+        // attachment) once there are reviews to resolve. Admins can edit any sheet
+        // on the same terms as its creator.
+        _canEdit = (_isCreator || _isAdmin) && (_sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending)
                                   || _sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed));
         var myEmail = _me.Email ?? "";
         var isApprover = _sheet.ApprovalSteps.Any(s => string.Equals(s.ApproverEmail, myEmail, StringComparison.OrdinalIgnoreCase));
-        _canView = _isCreator || isApprover;
+        // Non-confidential sheets are visible to every user. Confidential sheets
+        // are restricted to the creator, listed approvers and admins.
+        _canView = !_sheet.IsConfidential || _isCreator || isApprover || _isAdmin;
 
         _currentStatus = ApprovalWorkflow.StatusFor(_sheet);
 
@@ -359,7 +371,7 @@ else
         var comment = GetDraft(stepId).Trim();
         if (comment.Length == 0)
         {
-            _error = "Please add a comment explaining your review.";
+            ToastService.ShowError("Please add a comment explaining your review.", "Comment required");
             return;
         }
 
@@ -375,7 +387,7 @@ else
             if (sheet is null || step is null) { _busy = false; return; }
             if (!ApprovalWorkflow.IsActionable(step, sheet.ApprovalSteps))
             {
-                _error = "An earlier approval step is still open, so this step can't be actioned yet.";
+                ToastService.ShowError("An earlier approval step is still open, so this step can't be actioned yet.", "Step not ready");
                 _busy = false;
                 return;
             }
@@ -407,6 +419,7 @@ else
                 $"{MyName()} reviewed your minute sheet and left a comment to resolve.",
                 NavigationManager.Uri));
         }
+        ToastService.ShowSuccess("Your review has been submitted and the sheet creator was notified.", "Review submitted");
         _busy = false;
     }
 
@@ -428,7 +441,7 @@ else
             if (sheet is null || step is null) { _busy = false; return; }
             if (!ApprovalWorkflow.IsActionable(step, sheet.ApprovalSteps))
             {
-                _error = "An earlier approval step is still open, so this step can't be actioned yet.";
+                ToastService.ShowError("An earlier approval step is still open, so this step can't be actioned yet.", "Step not ready");
                 _busy = false;
                 return;
             }
@@ -464,6 +477,9 @@ else
                 "All approvers have approved your minute sheet.",
                 NavigationManager.Uri));
         }
+        ToastService.ShowSuccess(fullyApproved
+            ? "All approval steps are complete and the sheet is fully approved."
+            : "This step has been approved. The next approver has been notified.", fullyApproved ? "Fully approved" : "Step approved");
         _busy = false;
     }
 
@@ -474,7 +490,7 @@ else
         var note = GetResolveDraft(stepId).Trim();
         if (note.Length == 0)
         {
-            _error = "Please describe how you resolved the review.";
+            ToastService.ShowError("Please describe how you resolved the review.", "Note required");
             return;
         }
 
@@ -517,6 +533,7 @@ else
                 $"{MyName()} resolved your review. Please take another look and review or approve.",
                 NavigationManager.Uri));
         }
+        ToastService.ShowSuccess("The review has been resolved and sent back to the approver.", "Review resolved");
         _busy = false;
     }
 
@@ -552,7 +569,8 @@ else
             catch (IOException) { /* best-effort cleanup */ }
         }
 
-        NavigationManager.NavigateTo("dashboard/history");
+        ToastService.ShowSuccess("The minute sheet was deleted permanently.", "Sheet deleted");
+        NavigationManager.NavigateTo("/dashboard/history", forceLoad: false);
     }
 
     private string CreatorMeta()
@@ -563,6 +581,42 @@ else
         if (!string.IsNullOrEmpty(u.Department?.Name)) parts.Add(u.Department!.Name);
         if (!string.IsNullOrEmpty(u.EmployeeNo)) parts.Add($"Emp #{u.EmployeeNo}");
         return string.Join(" · ", parts);
+    }
+
+    private static (List<string> Actions, List<string> Decisions) ParseActionsDecisions(string? json)
+    {
+        var actions = new List<string>();
+        var decisions = new List<string>();
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return (actions, decisions);
+        }
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("actions", out var a) && a.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in a.EnumerateArray())
+                {
+                    var text = item.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text)) actions.Add(text);
+                }
+            }
+            if (root.TryGetProperty("decisions", out var d) && d.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in d.EnumerateArray())
+                {
+                    var text = item.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text)) decisions.Add(text);
+                }
+            }
+        }
+        catch
+        {
+            // Ignore malformed JSON.
+        }
+        return (actions, decisions);
     }
 
     private static string DotClass(ApprovalStepStatus s) => s switch

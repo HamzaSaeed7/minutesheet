@@ -123,7 +123,7 @@
 
         Logger.LogInformation("User {Email} verified their email via OTP.", Email);
         await SignInManager.SignInAsync(user, isPersistent: false);
-        RedirectManager.RedirectTo("");
+        RedirectManager.RedirectToWithStatus("", "Your email has been verified. Welcome to Minute Sheet!", HttpContext);
     }
 
     // TEMPORARY: confirms the account without a code so testing can continue
@@ -149,7 +149,7 @@
 
         Logger.LogWarning("User {Email} verified via TEMPORARY skip-email button.", Email);
         await SignInManager.SignInAsync(user, isPersistent: false);
-        RedirectManager.RedirectTo("");
+        RedirectManager.RedirectToWithStatus("", "Your email has been verified. Welcome to Minute Sheet!", HttpContext);
     }
 
     private async Task ResendCode()
