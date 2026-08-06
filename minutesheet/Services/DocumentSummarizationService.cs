@@ -169,79 +169,139 @@ public class DocumentSummarizationService
         }
     }
 
-    // Parses the model's JSON {"summary": "...", "actions": [...], "decisions": [...]} response,
-    // falling back to treating the whole response as plain summary text.
-    private static SummaryResult ParseSummaryResult(string? generatedText)
+    public async Task<string> ExtractActionItemsAsync(string documentText)
     {
-        if (!string.IsNullOrWhiteSpace(generatedText))
+        var apiKey = _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"];
+        if (string.IsNullOrEmpty(apiKey))
         {
-            var trimmed = generatedText.Trim();
-
-            // The model sometimes wraps JSON in a code fence.
-            if (trimmed.StartsWith("```"))
-            {
-                var start = trimmed.IndexOf('{');
-                var end = trimmed.LastIndexOf('}');
-                if (start >= 0 && end > start)
-                {
-                    trimmed = trimmed[start..(end + 1)];
-                }
-            }
-
-            try
-            {
-                using var doc = JsonDocument.Parse(trimmed);
-                var root = doc.RootElement;
-
-                var summary = root.TryGetProperty("summary", out var summaryProp)
-                    ? summaryProp.GetString()?.Trim()
-                    : null;
-
-                var actions = ReadStringArray(root, "actions");
-                var decisions = ReadStringArray(root, "decisions");
-
-                if (!string.IsNullOrWhiteSpace(summary))
-                {
-                    return new SummaryResult(summary, actions, decisions);
-                }
-            }
-            catch (JsonException)
-            {
-                // Not valid JSON — treat the raw text as the summary.
-            }
+            return "{\"error\": \"AI API Key is not configured.\"}";
         }
 
-        return new SummaryResult(generatedText?.Trim() ?? "Summary could not be generated.", new List<string>(), new List<string>());
+        var url = "https://openrouter.ai/api/v1/chat/completions";
+
+        var payload = new
+        {
+            model = "openrouter/free",
+            response_format = new { type = "json_object" },
+            messages = new[]
+            {
+                new { role = "system", content = "You are an AI assistant. Extract a list of action items from the provided meeting notes. Return a JSON array named 'action_items' where each item contains a 'task', 'owner', and 'deadline'." },
+                new { role = "user", content = documentText }
+            }
+        };
+
+        var jsonPayload = JsonSerializer.Serialize(payload);
+        var content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, url);
+            request.Headers.Add("Authorization", $"Bearer {apiKey}");
+            request.Headers.Add("HTTP-Referer", "http://localhost:5285");
+            request.Headers.Add("X-Title", "Minute Sheet App");
+            request.Content = content;
+
+            var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            
+            var responseJson = await response.Content.ReadAsStringAsync();
+            _logger.LogInformation("OpenRouter raw response (action items): {ResponseJson}", responseJson);
+            
+            using var doc = JsonDocument.Parse(responseJson);
+            var generatedText = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
+
+            return generatedText?.Trim() ?? "{\"action_items\": []}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to call AI API for action item extraction");
+            return "{\"error\": \"Failed to extract action items.\"}";
+        }
     }
 
-    private static List<string> ReadStringArray(JsonElement root, string name)
+    public async Task<string> GenerateAgendaAsync(string documentText)
     {
-        var result = new List<string>();
-        if (root.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.Array)
+        var apiKey = _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"];
+        if (string.IsNullOrEmpty(apiKey))
         {
-            foreach (var item in prop.EnumerateArray())
-            {
-                var text = item.GetString()?.Trim();
-                if (!string.IsNullOrWhiteSpace(text))
-                {
-                    result.Add(text);
-                }
-            }
+            return "{\"error\": \"AI API Key is not configured.\"}";
         }
-        return result;
+
+        var url = "https://openrouter.ai/api/v1/chat/completions";
+
+        var payload = new
+        {
+            model = "openrouter/free",
+            response_format = new { type = "json_object" },
+            messages = new[]
+            {
+                new { role = "system", content = "You are an AI assistant. Analyze the provided meeting notes and suggest a next-meeting agenda. Output a valid JSON array named 'agenda_items'. Each item must contain a 'topic' (what to discuss), an 'owner' (who leads the topic), and a 'time_box' (e.g., '10 mins')." },
+                new { role = "user", content = documentText }
+            }
+        };
+
+        var jsonPayload = JsonSerializer.Serialize(payload);
+        var content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, url);
+            request.Headers.Add("Authorization", $"Bearer {apiKey}");
+            request.Headers.Add("HTTP-Referer", "http://localhost:5285");
+            request.Headers.Add("X-Title", "Minute Sheet App");
+            request.Content = content;
+
+            var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            
+            var responseJson = await response.Content.ReadAsStringAsync();
+            _logger.LogInformation("OpenRouter raw response (agenda): {ResponseJson}", responseJson);
+            
+            using var doc = JsonDocument.Parse(responseJson);
+            var generatedText = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
+
+            return generatedText?.Trim() ?? "{\"agenda_items\": []}";
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to call AI API for agenda generation");
+            return "{\"error\": \"Failed to generate agenda.\"}";
+        }
     }
 }
 
-public sealed class SummaryResult
+public class ActionItemDto
 {
-    public SummaryResult(string summary, List<string> actions, List<string> decisions)
-    {
-        Summary = summary;
-        Actions = actions;
-        Decisions = decisions;
-    }
+    [System.Text.Json.Serialization.JsonPropertyName("task")]
+    public string Task { get; set; } = "";
 
-    public string Summary { get; }
-    public List<string> Actions { get; }
-    public List<string> Decisions { get; }
+    [System.Text.Json.Serialization.JsonPropertyName("owner")]
+    public string Owner { get; set; } = "";
+
+    [System.Text.Json.Serialization.JsonPropertyName("deadline")]
+    public string Deadline { get; set; } = "";
+}
+
+public class ActionItemsResponseDto
+{
+    [System.Text.Json.Serialization.JsonPropertyName("action_items")]
+    public List<ActionItemDto> ActionItems { get; set; } = new();
+}
+
+public class AgendaItemDto
+{
+    [System.Text.Json.Serialization.JsonPropertyName("topic")]
+    public string Topic { get; set; } = "";
+
+    [System.Text.Json.Serialization.JsonPropertyName("owner")]
+    public string Owner { get; set; } = "";
+
+    [System.Text.Json.Serialization.JsonPropertyName("time_box")]
+    public string TimeBox { get; set; } = "";
+}
+
+public class AgendaResponseDto
+{
+    [System.Text.Json.Serialization.JsonPropertyName("agenda_items")]
+    public List<AgendaItemDto> AgendaItems { get; set; } = new();
 }

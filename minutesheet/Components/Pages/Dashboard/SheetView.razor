@@ -99,46 +99,63 @@ else
             </div>
         }
 
-        @{
-            var (_actions, _decisions) = ParseActionsDecisions(_sheet.ActionsDecisions);
-        }
-        @if (_actions.Count > 0 || _decisions.Count > 0)
+        @if (!string.IsNullOrEmpty(_sheet.ActionItems))
         {
-            <div class="mb-3">
-                <div class="creator-label mb-1" style="color: #000066; font-weight: 600;">Actions &amp; Decisions</div>
-                <div style="display:grid;gap:10px;font-family:'Poppins',sans-serif;">
-                    @if (_actions.Count > 0)
-                    {
-                        <div style="background:#f0f4ff;border:1px solid #d3e0ff;border-left:4px solid #000066;border-radius:6px;padding:10px 14px;">
-                            <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#000066;margin-bottom:6px;">
-                                <span style="width:8px;height:8px;border-radius:50%;background:#000066;display:inline-block;"></span>
-                                Actions
-                            </div>
-                            <ul style="margin:0;padding-left:18px;font-size:13.5px;">
-                                @foreach (var item in _actions)
-                                {
-                                    <li style="margin-bottom:3px;">@item</li>
-                                }
-                            </ul>
-                        </div>
-                    }
-                    @if (_decisions.Count > 0)
-                    {
-                        <div style="background:#f2faf7;border:1px solid #d2ece3;border-left:4px solid #1a8a5a;border-radius:6px;padding:10px 14px;">
-                            <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#1a8a5a;margin-bottom:6px;">
-                                <span style="width:8px;height:8px;border-radius:50%;background:#1a8a5a;display:inline-block;"></span>
-                                Decisions
-                            </div>
-                            <ul style="margin:0;padding-left:18px;font-size:13.5px;">
-                                @foreach (var item in _decisions)
-                                {
-                                    <li style="margin-bottom:3px;">@item</li>
-                                }
-                            </ul>
-                        </div>
-                    }
+            var items = System.Text.Json.JsonSerializer.Deserialize<List<minutesheet.Services.ActionItemDto>>(_sheet.ActionItems);
+            if (items != null && items.Any())
+            {
+                <div class="mb-3">
+                    <div class="creator-label mb-1" style="color: #000066; font-weight: 600;">Action Items</div>
+                    <div class="description-body" style="font-family: 'Poppins', sans-serif; background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
+                        <ul style="list-style: none; padding-left: 0; margin-bottom: 0;">
+                            @foreach (var item in items)
+                            {
+                                <li style="margin-bottom: 6px;">
+                                    <input type="checkbox" disabled style="margin-right: 8px;" />
+                                    <strong>@item.Task</strong>
+                                    @if (!string.IsNullOrEmpty(item.Owner))
+                                    {
+                                        <span class="text-muted" style="margin-left: 8px; font-size: 13px;">(Owner: @item.Owner)</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(item.Deadline))
+                                    {
+                                        <span class="text-muted" style="margin-left: 8px; font-size: 13px;">(Deadline: @item.Deadline)</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </div>
                 </div>
-            </div>
+            }
+        }
+
+        @if (!string.IsNullOrEmpty(_sheet.NextMeetingAgenda))
+        {
+            var agenda = System.Text.Json.JsonSerializer.Deserialize<List<minutesheet.Services.AgendaItemDto>>(_sheet.NextMeetingAgenda);
+            if (agenda != null && agenda.Any())
+            {
+                <div class="mb-3">
+                    <div class="creator-label mb-1" style="color: #000066; font-weight: 600;">Next Meeting Agenda</div>
+                    <div class="description-body" style="font-family: 'Poppins', sans-serif; background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
+                        <ul style="list-style: none; padding-left: 0; margin-bottom: 0;">
+                            @foreach (var item in agenda)
+                            {
+                                <li style="margin-bottom: 6px;">
+                                    <strong>@item.Topic</strong>
+                                    @if (!string.IsNullOrEmpty(item.Owner))
+                                    {
+                                        <span class="text-muted" style="margin-left: 8px; font-size: 13px;">(Owner: @item.Owner)</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(item.TimeBox))
+                                    {
+                                        <span class="text-muted" style="margin-left: 8px; font-size: 13px;">(Time: @item.TimeBox)</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
         }
 
         <div class="mb-3">
