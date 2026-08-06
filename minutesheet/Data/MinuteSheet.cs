@@ -18,9 +18,11 @@ namespace minutesheet.Data
 
         public string? Summary { get; set; }
 
-        // AI-extracted actions and decisions shown under the summary (JSON object
-        // shaped {"actions": [...], "decisions": [...]}).
-        public string? ActionsDecisions { get; set; }
+        // Extracted action items stored as JSON string.
+        public string? ActionItems { get; set; }
+
+        // Generated next meeting agenda stored as JSON string.
+        public string? NextMeetingAgenda { get; set; }
 
         // Original file name as uploaded by the user (null when no attachment).
         [MaxLength(260)]

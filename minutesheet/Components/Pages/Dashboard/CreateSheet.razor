@@ -120,6 +120,61 @@ else
                     </div>
                 }
             </div>
+            <div class="d-flex flex-column" style="margin-top: 16px; gap: 8px;">
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingSummary" @onclick="GenerateSummaryAsync">
+                        @(_generatingSummary ? "Generating Summary..." : "Generate Summary")
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" style="font-family: 'Poppins', sans-serif;" disabled="@_generatingActionItems" @onclick="ExtractTasksAsync">
+                        @(_generatingActionItems ? "Extracting Tasks..." : "Extract Tasks")
+                    </button>
+                    <button type="button" class="btn btn-outline-success" style="font-family: 'Poppins', sans-serif;" disabled="@_generatingAgenda" @onclick="GenerateAgendaAsync">
+                        @(_generatingAgenda ? "Suggesting Agenda..." : "Suggest Agenda")
+                    </button>
+                </div>
+                @if (!string.IsNullOrEmpty(_summary))
+                {
+                    <textarea class="form-control" rows="4" readonly style="font-family: 'Poppins', sans-serif; font-size: 14px;">@_summary</textarea>
+                }
+                
+                @if (_actionItems.Any())
+                {
+                    <div class="mt-2 p-3" style="background-color: #f8f9fa; border-radius: 6px;">
+                        <h6 style="color: #000066; font-weight: 600;">Extracted Action Items</h6>
+                        <small class="text-muted d-block mb-2">You can manually edit this list before submitting.</small>
+                        
+                        @foreach (var item in _actionItems)
+                        {
+                            <div class="d-flex gap-2 mb-2">
+                                <input type="text" class="form-control form-control-sm" @bind="item.Task" placeholder="Task" />
+                                <input type="text" class="form-control form-control-sm" @bind="item.Owner" placeholder="Owner" style="max-width: 150px;" />
+                                <input type="text" class="form-control form-control-sm" @bind="item.Deadline" placeholder="Deadline" style="max-width: 150px;" />
+                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _actionItems.Remove(item)">&times;</button>
+                            </div>
+                        }
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-1" @onclick="() => _actionItems.Add(new minutesheet.Services.ActionItemDto())">+ Add Item</button>
+                    </div>
+                }
+                
+                @if (_agendaItems.Any())
+                {
+                    <div class="mt-2 p-3" style="background-color: #f8f9fa; border-radius: 6px;">
+                        <h6 style="color: #000066; font-weight: 600;">Suggested Next-Meeting Agenda</h6>
+                        <small class="text-muted d-block mb-2">You can manually edit this agenda before submitting.</small>
+                        
+                        @foreach (var item in _agendaItems)
+                        {
+                            <div class="d-flex gap-2 mb-2">
+                                <input type="text" class="form-control form-control-sm" @bind="item.Topic" placeholder="Topic" />
+                                <input type="text" class="form-control form-control-sm" @bind="item.Owner" placeholder="Owner" style="max-width: 150px;" />
+                                <input type="text" class="form-control form-control-sm" @bind="item.TimeBox" placeholder="Time box (e.g. 10 mins)" style="max-width: 150px;" />
+                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _agendaItems.Remove(item)">&times;</button>
+                            </div>
+                        }
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-1" @onclick="() => _agendaItems.Add(new minutesheet.Services.AgendaItemDto())">+ Add Agenda Item</button>
+                    </div>
+                }
+            </div>
         </div>
 
         <div class="content-card">
@@ -328,7 +383,10 @@ else
     private List<string> _actions = new();
     private List<string> _decisions = new();
     private bool _generatingSummary;
-    private bool _downloading;
+    private List<minutesheet.Services.ActionItemDto> _actionItems = new();
+    private bool _generatingActionItems;
+    private List<minutesheet.Services.AgendaItemDto> _agendaItems = new();
+    private bool _generatingAgenda;
 
     private string _title = "";
     private SheetCategory _category = SheetCategory.Financial;
@@ -339,6 +397,7 @@ else
     private IBrowserFile? _selectedFile;
     private string? _error;
     private bool _saving;
+    private bool _downloading;
 
     private const int MaxApprovals = 20;
     private static readonly string[] AllowedExtensions = { ".pdf", ".doc", ".docx" };
@@ -402,9 +461,16 @@ else
                     _existingAttachmentName = sheet.AttachmentFileName;
                     _existingAttachmentPath = sheet.AttachmentStoredPath;
                     _summary = sheet.Summary;
-                    var (actions, decisions) = ParseActionsDecisions(sheet.ActionsDecisions);
-                    _actions = actions;
-                    _decisions = decisions;
+                    if (!string.IsNullOrEmpty(sheet.ActionItems))
+                    {
+                        try { _actionItems = System.Text.Json.JsonSerializer.Deserialize<List<minutesheet.Services.ActionItemDto>>(sheet.ActionItems) ?? new(); }
+                        catch { _actionItems = new(); }
+                    }
+                    if (!string.IsNullOrEmpty(sheet.NextMeetingAgenda))
+                    {
+                        try { _agendaItems = System.Text.Json.JsonSerializer.Deserialize<List<minutesheet.Services.AgendaItemDto>>(sheet.NextMeetingAgenda) ?? new(); }
+                        catch { _agendaItems = new(); }
+                    }
                     _rows.Clear();
                     _lockedSteps.Clear();
                     foreach (var step in sheet.ApprovalSteps.OrderBy(s => s.StepIndex))
@@ -584,7 +650,8 @@ else
                 sheet.IsConfidential = _isConfidential;
                 sheet.DescriptionHtml = descriptionHtml;
                 sheet.Summary = _summary;
-                sheet.ActionsDecisions = SerializeActionsDecisions(_actions, _decisions);
+                sheet.ActionItems = _actionItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_actionItems) : null;
+                sheet.NextMeetingAgenda = _agendaItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_agendaItems) : null;
 
                 // Only rebuild the workflow while every step is still pending. Once
                 // approvals are underway (reviews to resolve), the steps are locked
@@ -611,12 +678,23 @@ else
 
                 if (allPending)
                 {
+                    var actionItemsText = "";
+                    if (_actionItems.Any())
+                    {
+                        actionItemsText = "\n\nAction Items:\n" + string.Join("\n", _actionItems.Select(i => $"- [ ] {i.Task} (Owner: {i.Owner}, Deadline: {i.Deadline})"));
+                    }
+                    var agendaText = "";
+                    if (_agendaItems.Any())
+                    {
+                        agendaText = "\n\nNext Meeting Agenda:\n" + string.Join("\n", _agendaItems.Select(i => $"- {i.Topic} (Owner: {i.Owner}, Time: {i.TimeBox})"));
+                    }
+
                     foreach (var email in _rows.Select(r => r.ApproverEmail).Distinct(StringComparer.OrdinalIgnoreCase))
                     {
                         EmailQueue.Enqueue(new EmailJob(
                             email,
                             "A minute sheet was updated",
-                            $"{createdBy} updated a minute sheet that needs your review or approval.",
+                            $"{createdBy} updated a minute sheet that needs your review or approval.{actionItemsText}{agendaText}",
                             link));
                     }
                 }
@@ -633,7 +711,8 @@ else
                     IsConfidential = _isConfidential,
                     DescriptionHtml = descriptionHtml,
                     Summary = _summary,
-                    ActionsDecisions = SerializeActionsDecisions(_actions, _decisions),
+                    ActionItems = _actionItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_actionItems) : null,
+                    NextMeetingAgenda = _agendaItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_agendaItems) : null,
                     AttachmentFileName = originalName,
                     AttachmentStoredPath = storedPath,
                     CreatedByUserId = user.Id,
@@ -659,12 +738,24 @@ else
 
                 // Queue the unique sheet link to each distinct approver.
                 link = NavigationManager.ToAbsoluteUri($"dashboard/sheet/{sheetToken}").AbsoluteUri;
+                
+                var actionItemsText = "";
+                if (_actionItems.Any())
+                {
+                    actionItemsText = "\n\nAction Items:\n" + string.Join("\n", _actionItems.Select(i => $"- [ ] {i.Task} (Owner: {i.Owner}, Deadline: {i.Deadline})"));
+                }
+                var agendaText = "";
+                if (_agendaItems.Any())
+                {
+                    agendaText = "\n\nNext Meeting Agenda:\n" + string.Join("\n", _agendaItems.Select(i => $"- {i.Topic} (Owner: {i.Owner}, Time: {i.TimeBox})"));
+                }
+
                 foreach (var email in _rows.Select(r => r.ApproverEmail).Distinct(StringComparer.OrdinalIgnoreCase))
                 {
                     EmailQueue.Enqueue(new EmailJob(
                         email,
                         "A minute sheet needs your approval",
-                        $"{createdBy} submitted a minute sheet that needs your review or approval.",
+                        $"{createdBy} submitted a minute sheet that needs your review or approval.{actionItemsText}{agendaText}",
                         link));
                 }
 
@@ -816,18 +907,37 @@ else
         }
     }
 
-    private async Task DownloadDocxAsync() => await DownloadSummaryAsync("docx");
-    private async Task DownloadDocAsync() => await DownloadSummaryAsync("doc");
-    private async Task DownloadPdfAsync() => await DownloadSummaryAsync("pdf");
-
-    private async Task DownloadSummaryAsync(string format)
+    private async Task ExtractTasksAsync()
     {
-        if (string.IsNullOrWhiteSpace(_summary))
+        _error = null;
+        _generatingActionItems = true;
+        try
         {
-            return;
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+            string plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
+            
+            var resultJson = await SummarizationService.ExtractActionItemsAsync(plainText);
+            
+            var response = System.Text.Json.JsonSerializer.Deserialize<minutesheet.Services.ActionItemsResponseDto>(resultJson);
+            if (response?.ActionItems != null)
+            {
+                _actionItems = response.ActionItems;
+            }
         }
+        catch (Exception ex)
+        {
+            _error = $"Failed to extract tasks: {ex.Message}";
+        }
+        finally
+        {
+            _generatingActionItems = false;
+        }
+    }
 
-        _downloading = true;
+    private async Task GenerateAgendaAsync()
+    {
+        _error = null;
+        _generatingAgenda = true;
         try
         {
             var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
@@ -850,29 +960,45 @@ else
             string ext;
             switch (format)
             {
-                case "docx":
-                    bytes = SheetExporter.BuildDocx(content);
-                    mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
-                    ext = "docx";
-                    break;
-                case "doc":
-                    bytes = SheetExporter.BuildDoc(content);
-                    mime = "application/msword";
-                    ext = "doc";
-                    break;
-                default:
-                    bytes = SheetExporter.BuildPdf(content);
-                    mime = "application/pdf";
-                    ext = "pdf";
-                    break;
+                _agendaItems = response.AgendaItems;
             }
-
-            var fileName = $"Minute-Sheet-{DateTime.Now:yyyyMMdd-HHmmss}.{ext}";
-            await JS.InvokeVoidAsync("quillInterop.downloadFile", fileName, mime, Convert.ToBase64String(bytes));
         }
         catch (Exception ex)
         {
-            ToastService.ShowError($"Failed to download {format.ToUpperInvariant()}: {ex.Message}", "Error");
+            _error = $"Failed to suggest agenda: {ex.Message}";
+        }
+        finally
+        {
+            _generatingAgenda = false;
+        }
+    }
+    private minutesheet.Services.SheetExporter.ExportContent CreateExportContent(string descriptionHtml)
+    {
+        var title = "Minute Sheet";
+        var catStr = _category.ToString();
+        var confStr = _isConfidential ? "Confidential" : "Standard";
+        var dateStr = DateTime.Now.ToString("dd MMM yyyy");
+        var preparedBy = _creator?.FullName ?? "Unknown";
+        
+        string plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
+        var summary = _summary ?? "";
+        
+        return new minutesheet.Services.SheetExporter.ExportContent(title, catStr, confStr, dateStr, preparedBy, plainText, summary);
+    }
+
+    private async Task DownloadDocxAsync()
+    {
+        _downloading = true;
+        try
+        {
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+            var content = CreateExportContent(descriptionHtml);
+            var bytes = SheetExporter.BuildDocx(content);
+            await JS.InvokeVoidAsync("downloadFileFromBytes", "Draft.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Export failed: {ex.Message}");
         }
         finally
         {
@@ -880,17 +1006,44 @@ else
         }
     }
 
-    private static string HtmlToPlainText(string? html)
+    private async Task DownloadDocAsync()
     {
-        if (string.IsNullOrEmpty(html))
+        _downloading = true;
+        try
         {
-            return "";
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+            var content = CreateExportContent(descriptionHtml);
+            var bytes = SheetExporter.BuildDoc(content);
+            await JS.InvokeVoidAsync("downloadFileFromBytes", "Draft.doc", "application/msword", Convert.ToBase64String(bytes));
         }
-        html = System.Text.RegularExpressions.Regex.Replace(html, "<br\\s*/?>", "\n", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        html = System.Text.RegularExpressions.Regex.Replace(html, "</p>", "\n", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
-        html = System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", " ");
-        html = System.Net.WebUtility.HtmlDecode(html);
-        return System.Text.RegularExpressions.Regex.Replace(html, @"[ \t]{2,}", " ").Trim();
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Export failed: {ex.Message}");
+        }
+        finally
+        {
+            _downloading = false;
+        }
+    }
+
+    private async Task DownloadPdfAsync()
+    {
+        _downloading = true;
+        try
+        {
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+            var content = CreateExportContent(descriptionHtml);
+            var bytes = SheetExporter.BuildPdf(content);
+            await JS.InvokeVoidAsync("downloadFileFromBytes", "Draft.pdf", "application/pdf", Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Export failed: {ex.Message}");
+        }
+        finally
+        {
+            _downloading = false;
+        }
     }
 
     public async ValueTask DisposeAsync()
