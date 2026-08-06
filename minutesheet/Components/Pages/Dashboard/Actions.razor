@@ -33,13 +33,14 @@ else
         }
         else
         {
-            <div class="act-head" style="grid-template-columns:1.3fr 1.3fr 1fr 1fr 90px;">
-                <div>Date</div><div>From</div><div>Category</div><div>Your status</div><div></div>
+            <div class="act-head" style="grid-template-columns:1.5fr 1.3fr 1.3fr 1fr 1fr 90px;">
+                <div>Title</div><div>Date</div><div>From</div><div>Category</div><div>Your status</div><div></div>
             </div>
             @foreach (var step in _pending)
             {
                 var sheet = step.MinuteSheet!;
-                <div class="act-row" style="grid-template-columns:1.3fr 1.3fr 1fr 1fr 90px;">
+                <div class="act-row" style="grid-template-columns:1.5fr 1.3fr 1.3fr 1fr 1fr 90px;">
+                    <div style="font-weight:600;color:var(--ink-strong);">@sheet.Title</div>
                     <div>@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
                     <div style="color:#565b78;">@CreatorName(sheet)</div>
                     <div style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
@@ -58,13 +59,14 @@ else
         }
         else
         {
-            <div class="act-head" style="grid-template-columns:1.5fr 1fr 1fr 90px;">
-                <div>Date</div><div>Category</div><div>Reviews to resolve</div><div></div>
+            <div class="act-head" style="grid-template-columns:1.5fr 1.5fr 1fr 1fr 90px;">
+                <div>Title</div><div>Date</div><div>Category</div><div>Reviews to resolve</div><div></div>
             </div>
             @foreach (var sheet in _toResolve)
             {
                 var count = sheet.ApprovalSteps.Count(s => s.Status == ApprovalStepStatus.Reviewed);
-                <div class="act-row" style="grid-template-columns:1.5fr 1fr 1fr 90px;">
+                <div class="act-row" style="grid-template-columns:1.5fr 1.5fr 1fr 1fr 90px;">
+                    <div style="font-weight:600;color:var(--ink-strong);">@sheet.Title</div>
                     <div>@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
                     <div style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
                     <div><span class="badge bg-warning">@count</span></div>

@@ -97,6 +97,7 @@
 
                     <div class="history-body">
                         <div class="history-top">
+                            <span class="history-title">@sheet.Title</span>
                             <span class="history-cat">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial") minute sheet</span>
                             @if (sheet.IsConfidential)
                             {
@@ -230,6 +231,7 @@
         {
             var haystack = string.Join(" ", new[]
             {
+                sheet.Title,
                 sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial",
                 sheet.CreatedByUser?.FullName ?? "",
                 sheet.CreatedByUser?.Email ?? "",
