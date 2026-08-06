@@ -44,6 +44,7 @@ builder.Services.AddSingleton<EmailQueue>();
 builder.Services.AddHostedService<EmailBackgroundService>();
 
 builder.Services.AddScoped<minutesheet.Services.DocumentSummarizationService>();
+builder.Services.AddSingleton<minutesheet.Services.SheetPdfService>();
 builder.Services.AddScoped<minutesheet.Services.ToastService>();
 
 var app = builder.Build();

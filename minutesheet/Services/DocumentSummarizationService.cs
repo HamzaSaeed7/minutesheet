@@ -402,6 +402,20 @@ public class DocumentSummarizationService
     }
 }
 
+public class SummaryResult
+{
+    public SummaryResult(string summary, List<string> actions, List<string> decisions)
+    {
+        Summary = summary;
+        Actions = actions;
+        Decisions = decisions;
+    }
+
+    public string Summary { get; set; }
+    public List<string> Actions { get; set; }
+    public List<string> Decisions { get; set; }
+}
+
 public class ActionItemDto
 {
     [System.Text.Json.Serialization.JsonPropertyName("task")]
