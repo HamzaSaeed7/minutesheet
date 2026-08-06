@@ -676,7 +676,7 @@
     /* ---------- Second row ---------- */
     .row2-grid {
         display: grid;
-        grid-template-columns: 1fr 1.4fr 1fr;
+        grid-template-columns: 1fr 1.4fr;
         gap: 18px;
     }
 
@@ -1161,8 +1161,8 @@
                 <div class="ua-row" @onclick="() => GoToSheet(step)">
                     <span class="ua-dot" style="background:@(isReview ? "#3548d4" : "#e2a138")"></span>
                     <div class="ua-main">
-                        <div class="ua-title">@(isReview ? "Review" : "Approve") · @(step.MinuteSheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
-                        <div class="ua-sub">Created @step.MinuteSheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")</div>
+                        <div class="ua-title">@step.MinuteSheet.Title</div>
+                        <div class="ua-sub">@(isReview ? "Review" : "Approve") · @(step.MinuteSheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial") · @step.MinuteSheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")</div>
                     </div>
                     <span class="badge bg-warning">@(isReview ? "Needs review" : "Pending")</span>
                 </div>
@@ -1236,36 +1236,6 @@
                     }
                 </tbody>
             </table>
-        </div>
-
-        <div class="qa-stack">
-            <a class="qa-card qa-dark" href="dashboard/create">
-                <div class="qa-row">
-                    <div class="qa-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round"><path d="M12 5v14M5 12h14"></path></svg></div>
-                    <div>
-                        <div class="qa-title">Create a new sheet</div>
-                        <div class="qa-desc">Description, attachment & workflow</div>
-                    </div>
-                </div>
-            </a>
-            <a class="qa-card" href="dashboard/history">
-                <div class="qa-row">
-                    <div class="qa-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3548d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg></div>
-                    <div>
-                        <div class="qa-title">View history</div>
-                        <div class="qa-desc">Your submitted sheets & progress</div>
-                    </div>
-                </div>
-            </a>
-            <a class="qa-card" href="dashboard/actions">
-                <div class="qa-row">
-                    <div class="qa-icon"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#3548d4" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 12l2 2 4-4"></path><circle cx="12" cy="12" r="9"></circle></svg></div>
-                    <div>
-                        <div class="qa-title">Actions</div>
-                        <div class="qa-desc">Sheets waiting on your review</div>
-                    </div>
-                </div>
-            </a>
         </div>
     </div>
 

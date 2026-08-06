@@ -11,7 +11,6 @@
 @attribute [Authorize]
 
 @inject UserManager<ApplicationUser> UserManager
-@inject SignInManager<ApplicationUser> SignInManager
 @inject ApplicationDbContext DbContext
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IWebHostEnvironment Env
@@ -185,22 +184,27 @@
         <strong>This cannot be undone.</strong>
     </div>
 
-    <EditForm Model="Delete" FormName="delete-account" OnValidSubmit="OnDeleteAccountAsync" method="post">
-        <DataAnnotationsValidator />
-        <ValidationSummary class="text-danger" role="alert" />
+    @if (_deleteError is not null)
+    {
+        <div class="alert alert-danger" role="alert" style="margin:0 0 14px;">@_deleteError</div>
+    }
+
+    @* Posts to a dedicated endpoint (not this interactive circuit) so SignOutAsync can
+       write the auth cookie during a real HTTP request. See /Account/DeleteAccount. *@
+    <form action="Account/DeleteAccount" method="post">
+        <AntiforgeryToken />
 
         @if (_requirePassword)
         {
             <div class="mb-3">
                 <div class="field-label">Confirm your password</div>
-                <InputText type="password" @bind-Value="Delete.Password" class="form-control"
-                           autocomplete="current-password" placeholder="Current password" />
-                <ValidationMessage For="() => Delete.Password" class="text-danger" />
+                <input type="password" name="password" class="form-control"
+                       autocomplete="current-password" placeholder="Current password" required />
             </div>
         }
 
         <button type="submit" class="btn btn-danger" style="border-radius:10px;padding:12px 24px;">Delete my account</button>
-    </EditForm>
+    </form>
 </div>
 
 @code {
@@ -211,6 +215,7 @@
     private bool _isAdmin;
     private string? _message;
     private string? _avatarError;
+    private string? _deleteError;
     private string _avatarVersion = "1";
     private List<Department> _departments = new();
     private bool _is2faEnabled;
@@ -226,9 +231,9 @@
     [SupplyParameterFromForm(FormName = "profile")]
     private ProfileModel Input { get => _input; set => _input = value ?? new(); }
 
-    private DeleteModel _delete = new();
-    [SupplyParameterFromForm(FormName = "delete-account")]
-    private DeleteModel Delete { get => _delete; set => _delete = value ?? new(); }
+    // Set when /Account/DeleteAccount redirects back after a failed deletion.
+    [SupplyParameterFromQuery(Name = "deleteError")]
+    private string? DeleteError { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -250,6 +255,13 @@
         _avatarVersion = DateTime.UtcNow.Ticks.ToString();
         _is2faEnabled = await UserManager.GetTwoFactorEnabledAsync(_user);
         _recoveryCodesLeft = await UserManager.CountRecoveryCodesAsync(_user);
+
+        _deleteError = DeleteError switch
+        {
+            "password" => "Incorrect password. Your account was not deleted.",
+            null => null,
+            _ => "We couldn't delete your account. Please try again."
+        };
 
         // Seed the form once when the interactive page initializes.
         Input.FullName = _user.FullName;
@@ -351,32 +363,6 @@
         Logger.LogInformation("User {Email} updated their profile picture.", _email);
     }
 
-    private async Task OnDeleteAccountAsync()
-    {
-        if (_requirePassword && !await UserManager.CheckPasswordAsync(_user, Delete.Password))
-        {
-            _message = "Error: Incorrect password.";
-            return;
-        }
-
-        var departmentId = _user.DepartmentId;
-        var avatarPath = _user.AvatarPath;
-        var userId = await UserManager.GetUserIdAsync(_user);
-
-        var result = await UserManager.DeleteAsync(_user);
-        if (!result.Succeeded)
-        {
-            _message = $"Error: {string.Join(", ", result.Errors.Select(e => e.Description))}";
-            return;
-        }
-
-        DeleteAvatarFile(avatarPath);
-        await AdjustDepartmentCountAsync(departmentId, delta: -1);
-        await SignInManager.SignOutAsync();
-
-        Logger.LogInformation("User with ID '{UserId}' deleted their account.", userId);
-        NavigationManager.NavigateTo("Account/Login", forceLoad: true);
-    }
 
     private async Task AdjustDepartmentCountAsync(int? departmentId, int delta)
     {
@@ -469,11 +455,5 @@
         [Phone]
         [Display(Name = "Phone number")]
         public string? PhoneNumber { get; set; }
-    }
-
-    private sealed class DeleteModel
-    {
-        [DataType(DataType.Password)]
-        public string Password { get; set; } = "";
     }
 }

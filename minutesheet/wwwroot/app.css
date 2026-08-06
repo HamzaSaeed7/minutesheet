@@ -202,13 +202,13 @@ a, .btn-link {
 }
 
 /* ---------- Auth (login / signup / verify) ---------- */
-.auth-page { position: relative; height: 100vh; overflow: hidden; display: flex; flex-direction: column; background: #000066; font-family: 'Poppins', sans-serif; }
+.auth-page { position: relative; min-height: 100vh; overflow-x: hidden; display: flex; flex-direction: column; background: #000066; font-family: 'Poppins', sans-serif; }
 .auth-bg { position: absolute; inset: 0; background-image: url('https://images.unsplash.com/photo-1607460694867-af0c6d6f2c52?fm=jpg&q=80&w=2400&auto=format&fit=crop'); background-size: cover; background-position: center; }
 .auth-overlay { position: absolute; inset: 0; background: linear-gradient(105deg, rgba(0,0,60,0.94) 0%, rgba(0,0,102,0.86) 42%, rgba(0,0,102,0.45) 68%, rgba(0,0,80,0.30) 100%); }
 .auth-glow { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
 .auth-glow::before { content: ''; position: absolute; top: -120px; left: -80px; width: 520px; height: 520px; border-radius: 50%; background: radial-gradient(circle, rgba(80,80,200,0.35) 0%, transparent 70%); }
 
-.auth-wrap { position: relative; flex: 1; display: flex; flex-wrap: wrap; gap: clamp(24px, 3vw, 48px); align-items: center; justify-content: center; padding: clamp(40px, 6vh, 72px) clamp(24px, 5vw, 72px); }
+.auth-wrap { position: relative; flex: 1; display: flex; flex-wrap: wrap; gap: clamp(24px, 3vw, 48px); align-items: center; align-content: safe center; justify-content: safe center; padding: clamp(40px, 6vh, 72px) clamp(24px, 5vw, 72px); }
 
 /* Branding panel */
 .auth-brand { flex: 1 1 420px; min-width: 300px; max-width: 620px; color: #fff; }
@@ -462,7 +462,8 @@ a, .btn-link {
 
 .history-body { flex: 1; min-width: 0; }
 .history-top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.history-cat { font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14.5px; color: var(--ink-strong); }
+.history-title { font-family: 'Poppins', sans-serif; font-weight: 600; font-size: 14.5px; color: var(--ink-strong); }
+.history-cat { font-size: 12.5px; font-weight: 500; color: var(--muted-2); }
 .conf-chip { background: var(--danger-bg); color: var(--danger); font-size: 11px; font-weight: 600; padding: 2px 9px; border-radius: 20px; }
 .status-pill { font-size: 11.5px; font-weight: 600; padding: 4px 12px; border-radius: 20px; margin-left: auto; white-space: nowrap; }
 .status-ok { background: var(--ok-bg); color: var(--ok); }
@@ -707,6 +708,12 @@ a, .btn-link {
 .seg-tabs { display: inline-flex; background: var(--bg); border-radius: 10px; padding: 4px; gap: 4px; }
 .seg-tab { border: none; border-radius: 7px; padding: 8px 18px; font-size: 13.5px; font-weight: 600; cursor: pointer; background: transparent; color: var(--muted); }
 .seg-tab.active { background: #fff; color: var(--brand); box-shadow: 0 1px 3px rgba(20,23,58,0.1); }
+.seg-row { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; }
+.seg-col { min-width: 0; }
+
+@media (max-width: 640px) {
+    .seg-row { grid-template-columns: 1fr; }
+}
 .info-note { background: var(--brand-tint); border-radius: 14px; padding: 18px 20px; font-size: 13px; color: var(--brand); line-height: 1.5; }
 .step-num { width: 26px; height: 26px; border-radius: 50%; background: var(--sidebar); color: #fff; font-size: 12px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: 0 0 auto; }
 
@@ -943,37 +950,130 @@ button.ql-dictateEn.listening, button.ql-dictateUr.listening {
     .ms-toast { animation: none; }
 }
 
-/* ---------- Share combobox ---------- */
-.share-dropdown {
-    position: absolute;
-    top: calc(100% + 6px);
-    left: 0;
-    right: 0;
-    z-index: 30;
-    background: #fff;
-    border: 1px solid var(--border);
-    border-radius: 10px;
-    box-shadow: 0 6px 24px rgba(20, 23, 58, 0.10);
-    max-height: 240px;
-    overflow: auto;
-    padding: 6px;
-    display: flex;
-    flex-direction: column;
-    gap: 2px;
+/* =====================================================================
+   Responsive layout — pure UI overrides.
+   Keeps every page consistent across screens without changing markup
+   or application logic. Breakpoints: tablet (≤991), mobile (≤575).
+   ===================================================================== */
+
+/* Prevent media from breaking narrow layouts */
+img { max-width: 100%; height: auto; }
+.page,
+main,
+.content { min-width: 0; }
+
+/* Kill the empty white space revealed when overscrolling past the top or
+   bottom of any page (rubber-band bounce / pull-to-refresh gap). Allowing
+   the page to overscroll shows the blank document background behind the
+   layout, which reads as unprofessional white strips. */
+html {
+    margin: 0;
+    padding: 0;
+    background: var(--bg);
 }
-.share-dropdown-item {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    width: 100%;
-    text-align: left;
-    border: none;
-    background: transparent;
-    padding: 8px 10px;
-    border-radius: 8px;
-    cursor: pointer;
-    color: inherit;
+html,
+body {
+    overscroll-behavior: none;
 }
-.share-dropdown-item:hover:not(:disabled) { background: var(--brand-tint); }
-.share-dropdown-item:disabled { opacity: 0.5; cursor: default; }
-.share-dropdown-empty { padding: 12px 10px; color: var(--muted-2); font-size: 13px; }
+
+@media (max-width: 1199.98px) {
+    .page-container { padding-left: 28px; padding-right: 28px; }
+}
+
+/* ---------- Tablet and below (also covers 768px) ---------- */
+@media (max-width: 991.98px) {
+    /* Actions grid: collapse the 5/4-column grids into 2 columns */
+    .act-head,
+    .act-row { grid-template-columns: 1fr 1fr !important; gap: 12px 18px; }
+
+    /* Data tables become horizontally scrollable within their own card */
+    .table,
+    table.sheets-table {
+        display: block;
+        width: 100%;
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+    .table th, .table td,
+    table.sheets-table th, table.sheets-table td { white-space: nowrap; }
+
+    /* History rows become tidy two-line cards on tablets: the date chip and
+       content sit on the first line, the action buttons align to the right
+       beneath a subtle divider — a clean, consistent "inbox" row. */
+    .history-row { flex-wrap: wrap; gap: 10px 18px; padding: 16px 18px; }
+    .history-date { align-self: flex-start; width: 56px; height: 56px; }
+    .history-body { flex: 1 1 240px; min-width: 0; }
+    .history-actions { width: 100%; margin-left: 0; flex-wrap: wrap;
+                       justify-content: flex-end; padding-top: 12px;
+                       border-top: 1px solid var(--divider); }
+    .history-toolbar { padding: 14px; }
+
+    /* Sheet view header row wraps instead of overflowing */
+    .content-card > .d-flex.align-items-center.gap-3 { flex-wrap: wrap; }
+
+    /* Create-sheet workflow rows wrap; the approver fills the whole row */
+    .wf-row { flex-wrap: wrap; }
+    .wf-approver { flex-basis: 100%; }
+
+    /* Notification dropdown stays inside the viewport */
+    .notif-panel { right: 50%; left: auto; transform: translateX(50%);
+                   width: min(300px, calc(100vw - 32px)); }
+
+    /* Auth pages: collapse the split branding + form layout into a single
+       centered column. The big headline/lede/stats are hidden so the card
+       sits front-and-centre with a compact logo header above it. */
+    .auth-wrap {
+        flex-direction: column;
+        justify-content: center;
+        align-items: center;
+        align-content: safe center;
+        gap: 28px;
+        padding: 40px 24px;
+    }
+    .auth-brand {
+        flex: none;
+        min-width: 0;
+        max-width: none;
+        text-align: center;
+    }
+    .auth-brand-head {
+        justify-content: center;
+        margin-bottom: 0;
+        gap: 14px;
+    }
+    .auth-logo-box { padding: 10px 14px; }
+    .auth-logo-box img { height: 36px; }
+    .auth-badge,
+    .auth-headline,
+    .auth-lede,
+    .auth-stats { display: none; }
+    .auth-card {
+        flex: none;
+        width: 100%;
+        max-width: 440px;
+        min-width: 0;
+    }
+}
+
+/* ---------- Mobile ---------- */
+@media (max-width: 575.98px) {
+    .page-container { padding: 20px 14px 48px; }
+    .content-card { padding: 18px; }
+
+    /* Segment tabs (Financial/Non-Financial etc.) fill the row */
+    .seg-tabs { display: flex; width: 100%; }
+    .seg-tab { flex: 1 1 auto; text-align: center; padding: 8px 10px; }
+
+    /* Actions: single-column stacked cards (hide the column headers) */
+    .act-head { display: none !important; }
+    .act-row { grid-template-columns: 1fr !important; padding: 14px 18px; gap: 6px; }
+    .act-row > * { padding: 2px 0; }
+
+    /* Wrap common inline flex rows so nothing overflows sideways */
+    .content-card > .d-flex.gap-2,
+    .create-col .d-flex.gap-2 { flex-wrap: wrap; }
+    .content-card .d-flex.justify-content-between { flex-wrap: wrap; }
+
+    .stat-card { padding: 18px; }
+    .page-title { font-size: 21px; }
+}
