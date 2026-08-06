@@ -19,7 +19,7 @@ public class DocumentSummarizationService
         _logger = logger;
     }
 
-    public async Task<string> GenerateSummaryAsync(
+    public async Task<SummaryResult> GenerateSummaryAsync(
         string category, 
         string creatorName, 
         string creatorDesignation, 
@@ -31,7 +31,7 @@ public class DocumentSummarizationService
         var text = await ExtractTextAsync(category, creatorName, creatorDesignation, creatorDepartment, creatorEmpNo, descriptionHtml, file);
         if (string.IsNullOrWhiteSpace(text))
         {
-            return "No text available to summarize.";
+            return new SummaryResult("No text available to summarize.", new List<string>(), new List<string>());
         }
         return await SummarizeAsync(text);
     }
@@ -93,13 +93,13 @@ public class DocumentSummarizationService
         return $"Category: {category}\nPrepared By: {creatorName}\nDesignation: {creatorDesignation}\nDepartment: {creatorDepartment}\nEmp#: {creatorEmpNo}\n\nDescription:\n{plainText}\n\nAttachment Text:\n{attachmentText}";
     }
 
-    private async Task<string> SummarizeAsync(string documentText)
+    private async Task<SummaryResult> SummarizeAsync(string documentText)
     {
         var apiKey = _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"];
         if (string.IsNullOrWhiteSpace(apiKey))
         {
             _logger.LogError("AI API Key is not configured in OpenRouterSettings:ApiKey.");
-            return "Error: AI API Key is not configured. Please add it to your user secrets.";
+            return new SummaryResult("Error: AI API Key is not configured. Please add it to your user secrets.", new List<string>(), new List<string>());
         }
 
         var url = "https://openrouter.ai/api/v1/chat/completions";
@@ -109,7 +109,7 @@ public class DocumentSummarizationService
             model = "openai/gpt-oss-20b:free",
             messages = new[]
             {
-                new { role = "system", content = "Provide a concise, professional summary of the entire provided text. Regardless of whether the input text is in English, Urdu script, or Roman Urdu, the final summary MUST be written in English." },
+                new { role = "system", content = "You are a minute-sheet summarizer. Given the provided text, produce a concise professional summary and extract the key actions and decisions. Respond ONLY with a single JSON object shaped exactly like {\"summary\": \"...\", \"actions\": [\"...\", \"...\"], \"decisions\": [\"...\", \"...\"]}. An 'action' is something that must be done or followed up (who does what by when). A 'decision' is a resolution or conclusion reached in the meeting. Regardless of whether the input text is in English, Urdu script, or Roman Urdu, the summary, every action and every decision MUST be written in English." },
                 new { role = "user", content = documentText }
             }
         };
@@ -145,27 +145,103 @@ public class DocumentSummarizationService
                 var finishReason = finishReasonProp.GetString();
                 if (finishReason == "content_filter")
                 {
-                    return "Error: The document text was flagged by the AI safety filter. Please review the content.";
+                    return new SummaryResult("Error: The document text was flagged by the AI safety filter. Please review the content.", new List<string>(), new List<string>());
                 }
             }
 
             // Fallback check in case the model returns safety strings directly in the content
             if (!string.IsNullOrWhiteSpace(generatedText) && generatedText.Trim().StartsWith("User Safety:"))
             {
-                return "Error: The document text was flagged by the AI safety filter. Please review the content.";
+                return new SummaryResult("Error: The document text was flagged by the AI safety filter. Please review the content.", new List<string>(), new List<string>());
             }
 
-            return generatedText?.Trim() ?? "Summary could not be generated.";
+            return ParseSummaryResult(generatedText);
         }
         catch (HttpRequestException httpEx) when (httpEx.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
         {
             _logger.LogWarning(httpEx, "AI API rate limit reached (429)");
-            return "Error: AI service rate limit reached (429). Please try again in a moment or check your API quota.";
+            return new SummaryResult("Error: AI service rate limit reached (429). Please try again in a moment or check your API quota.", new List<string>(), new List<string>());
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to call AI API");
-            return "Error: Failed to generate summary from AI service.";
+            return new SummaryResult("Error: Failed to generate summary from AI service.", new List<string>(), new List<string>());
         }
     }
+
+    // Parses the model's JSON {"summary": "...", "actions": [...], "decisions": [...]} response,
+    // falling back to treating the whole response as plain summary text.
+    private static SummaryResult ParseSummaryResult(string? generatedText)
+    {
+        if (!string.IsNullOrWhiteSpace(generatedText))
+        {
+            var trimmed = generatedText.Trim();
+
+            // The model sometimes wraps JSON in a code fence.
+            if (trimmed.StartsWith("```"))
+            {
+                var start = trimmed.IndexOf('{');
+                var end = trimmed.LastIndexOf('}');
+                if (start >= 0 && end > start)
+                {
+                    trimmed = trimmed[start..(end + 1)];
+                }
+            }
+
+            try
+            {
+                using var doc = JsonDocument.Parse(trimmed);
+                var root = doc.RootElement;
+
+                var summary = root.TryGetProperty("summary", out var summaryProp)
+                    ? summaryProp.GetString()?.Trim()
+                    : null;
+
+                var actions = ReadStringArray(root, "actions");
+                var decisions = ReadStringArray(root, "decisions");
+
+                if (!string.IsNullOrWhiteSpace(summary))
+                {
+                    return new SummaryResult(summary, actions, decisions);
+                }
+            }
+            catch (JsonException)
+            {
+                // Not valid JSON — treat the raw text as the summary.
+            }
+        }
+
+        return new SummaryResult(generatedText?.Trim() ?? "Summary could not be generated.", new List<string>(), new List<string>());
+    }
+
+    private static List<string> ReadStringArray(JsonElement root, string name)
+    {
+        var result = new List<string>();
+        if (root.TryGetProperty(name, out var prop) && prop.ValueKind == JsonValueKind.Array)
+        {
+            foreach (var item in prop.EnumerateArray())
+            {
+                var text = item.GetString()?.Trim();
+                if (!string.IsNullOrWhiteSpace(text))
+                {
+                    result.Add(text);
+                }
+            }
+        }
+        return result;
+    }
+}
+
+public sealed class SummaryResult
+{
+    public SummaryResult(string summary, List<string> actions, List<string> decisions)
+    {
+        Summary = summary;
+        Actions = actions;
+        Decisions = decisions;
+    }
+
+    public string Summary { get; }
+    public List<string> Actions { get; }
+    public List<string> Decisions { get; }
 }

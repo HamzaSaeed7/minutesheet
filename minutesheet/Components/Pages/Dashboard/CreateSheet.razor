@@ -10,6 +10,7 @@
 @using Microsoft.EntityFrameworkCore
 @using minutesheet.Data
 @using minutesheet.Components.Account
+@using minutesheet.Services
 
 @attribute [Authorize]
 
@@ -113,15 +114,6 @@ else
                     </div>
                 }
             </div>
-            <div class="d-flex flex-column" style="margin-top: 16px; gap: 8px;">
-                <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingSummary" @onclick="GenerateSummaryAsync">
-                    @(_generatingSummary ? "Generating Summary..." : "Generate Summary")
-                </button>
-                @if (!string.IsNullOrEmpty(_summary))
-                {
-                    <textarea class="form-control" rows="4" readonly style="font-family: 'Poppins', sans-serif; font-size: 14px;">@_summary</textarea>
-                }
-            </div>
         </div>
 
         <div class="content-card">
@@ -178,7 +170,7 @@ else
                                     <option value="@ApprovalAction.Approve">Approve</option>
                                 </select>
                             }
-                            <input list="approverEmailOptions" class="form-control form-control-sm" style="flex:1;" placeholder="-- select approver --" @bind="row.ApproverEmail" @bind:event="oninput" />
+                            <input list="approverEmailOptions" class="form-control form-control-sm wf-approver" placeholder="-- select approver --" @bind="row.ApproverEmail" @bind:event="oninput" />
                             @if (_rows.Count > 1)
                             {
                                 <button type="button" class="wf-remove" @onclick="() => RemoveRow(row)">&times;</button>
@@ -246,6 +238,64 @@ else
                 <text>Approvers are notified by email as soon as you submit. Review steps require a comment before moving on; approval steps don't.</text>
             }
         </div>
+        <div class="content-card">
+            <div class="card-eyebrow" style="margin-bottom:12px;">AI Summary</div>
+            <div class="d-flex flex-column" style="gap:10px;">
+                <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingSummary" @onclick="GenerateSummaryAsync">
+                    @(_generatingSummary ? "Generating Summary..." : "Generate Summary")
+                </button>
+                @if (!string.IsNullOrEmpty(_summary))
+                {
+                    <textarea class="form-control" rows="6" readonly style="font-family: 'Poppins', sans-serif; font-size: 14px; resize: vertical;">@_summary</textarea>
+                    @if (_actions.Count > 0 || _decisions.Count > 0)
+                    {
+                        <div style="display:grid;gap:10px;font-family:'Poppins',sans-serif;">
+                            @if (_actions.Count > 0)
+                            {
+                                <div style="background:#f0f4ff;border:1px solid #d3e0ff;border-left:4px solid #000066;border-radius:6px;padding:10px 14px;">
+                                    <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#000066;margin-bottom:6px;font-size:13px;">
+                                        <span style="width:8px;height:8px;border-radius:50%;background:#000066;display:inline-block;"></span>
+                                        Actions
+                                    </div>
+                                    <ul style="margin:0;padding-left:18px;font-size:13px;">
+                                        @foreach (var item in _actions)
+                                        {
+                                            <li style="margin-bottom:3px;">@item</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                            @if (_decisions.Count > 0)
+                            {
+                                <div style="background:#f2faf7;border:1px solid #d2ece3;border-left:4px solid #1a8a5a;border-radius:6px;padding:10px 14px;">
+                                    <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#1a8a5a;margin-bottom:6px;font-size:13px;">
+                                        <span style="width:8px;height:8px;border-radius:50%;background:#1a8a5a;display:inline-block;"></span>
+                                        Decisions
+                                    </div>
+                                    <ul style="margin:0;padding-left:18px;font-size:13px;">
+                                        @foreach (var item in _decisions)
+                                        {
+                                            <li style="margin-bottom:3px;">@item</li>
+                                        }
+                                    </ul>
+                                </div>
+                            }
+                        </div>
+                    }
+                    <div class="d-flex flex-wrap" style="gap:8px;">
+                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadDocxAsync" disabled="@_downloading">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Word (.docx)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadDocAsync" disabled="@_downloading">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Word (.doc)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadPdfAsync" disabled="@_downloading">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>PDF
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
     </div>
 </div>
 }
@@ -269,7 +319,10 @@ else
     private string? _existingAttachmentPath;
     private string _initialDescriptionHtml = "";
     private string? _summary;
+    private List<string> _actions = new();
+    private List<string> _decisions = new();
     private bool _generatingSummary;
+    private bool _downloading;
 
     private SheetCategory _category = SheetCategory.Financial;
     private bool _isConfidential;
@@ -341,6 +394,9 @@ else
                     _existingAttachmentName = sheet.AttachmentFileName;
                     _existingAttachmentPath = sheet.AttachmentStoredPath;
                     _summary = sheet.Summary;
+                    var (actions, decisions) = ParseActionsDecisions(sheet.ActionsDecisions);
+                    _actions = actions;
+                    _decisions = decisions;
                     _rows.Clear();
                     _lockedSteps.Clear();
                     foreach (var step in sheet.ApprovalSteps.OrderBy(s => s.StepIndex))
@@ -513,6 +569,7 @@ else
                 sheet.IsConfidential = _isConfidential;
                 sheet.DescriptionHtml = descriptionHtml;
                 sheet.Summary = _summary;
+                sheet.ActionsDecisions = SerializeActionsDecisions(_actions, _decisions);
 
                 // Only rebuild the workflow while every step is still pending. Once
                 // approvals are underway (reviews to resolve), the steps are locked
@@ -560,6 +617,7 @@ else
                     IsConfidential = _isConfidential,
                     DescriptionHtml = descriptionHtml,
                     Summary = _summary,
+                    ActionsDecisions = SerializeActionsDecisions(_actions, _decisions),
                     AttachmentFileName = originalName,
                     AttachmentStoredPath = storedPath,
                     CreatedByUserId = user.Id,
@@ -632,6 +690,51 @@ else
         return attr?.Name ?? d.ToString();
     }
 
+    private static (List<string> Actions, List<string> Decisions) ParseActionsDecisions(string? json)
+    {
+        var actions = new List<string>();
+        var decisions = new List<string>();
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            return (actions, decisions);
+        }
+        try
+        {
+            using var doc = System.Text.Json.JsonDocument.Parse(json);
+            var root = doc.RootElement;
+            if (root.TryGetProperty("actions", out var a) && a.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in a.EnumerateArray())
+                {
+                    var text = item.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text)) actions.Add(text);
+                }
+            }
+            if (root.TryGetProperty("decisions", out var d) && d.ValueKind == System.Text.Json.JsonValueKind.Array)
+            {
+                foreach (var item in d.EnumerateArray())
+                {
+                    var text = item.GetString()?.Trim();
+                    if (!string.IsNullOrWhiteSpace(text)) decisions.Add(text);
+                }
+            }
+        }
+        catch
+        {
+            // Ignore malformed JSON.
+        }
+        return (actions, decisions);
+    }
+
+    private static string? SerializeActionsDecisions(List<string> actions, List<string> decisions)
+    {
+        if (actions.Count == 0 && decisions.Count == 0)
+        {
+            return null;
+        }
+        return System.Text.Json.JsonSerializer.Serialize(new { actions, decisions });
+    }
+
     private static string Initials(string? fullName, string? email)
     {
         var source = !string.IsNullOrWhiteSpace(fullName) ? fullName : email ?? "";
@@ -672,7 +775,7 @@ else
 
             var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
             
-            _summary = await SummarizationService.GenerateSummaryAsync(
+            var result = await SummarizationService.GenerateSummaryAsync(
                 _category.ToString(), 
                 creatorName, 
                 creatorDesignation, 
@@ -680,6 +783,10 @@ else
                 creatorEmpNo, 
                 descriptionHtml, 
                 _selectedFile);
+
+            _summary = result.Summary;
+            _actions = result.Actions;
+            _decisions = result.Decisions;
 
             ToastService.ShowSuccess("Summary generated for your minute sheet.", "Summary ready");
         }
@@ -691,6 +798,83 @@ else
         {
             _generatingSummary = false;
         }
+    }
+
+    private async Task DownloadDocxAsync() => await DownloadSummaryAsync("docx");
+    private async Task DownloadDocAsync() => await DownloadSummaryAsync("doc");
+    private async Task DownloadPdfAsync() => await DownloadSummaryAsync("pdf");
+
+    private async Task DownloadSummaryAsync(string format)
+    {
+        if (string.IsNullOrWhiteSpace(_summary))
+        {
+            return;
+        }
+
+        _downloading = true;
+        try
+        {
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+
+            var content = new SheetExporter.ExportContent(
+                Title: $"Minute Sheet - {_category}",
+                Category: _category.ToString(),
+                Confidentiality: _isConfidential ? "Confidential" : "Non-Confidential",
+                Date: DateTime.Now.ToString("dd MMM yyyy hh:mm tt"),
+                PreparedBy: _creator is null
+                    ? "-"
+                    : string.IsNullOrWhiteSpace(_creator.FullName)
+                        ? _creator.Email
+                        : $"{_creator.FullName} ({_creator.Email})",
+                Description: HtmlToPlainText(descriptionHtml),
+                Summary: _summary);
+
+            byte[] bytes;
+            string mime;
+            string ext;
+            switch (format)
+            {
+                case "docx":
+                    bytes = SheetExporter.BuildDocx(content);
+                    mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+                    ext = "docx";
+                    break;
+                case "doc":
+                    bytes = SheetExporter.BuildDoc(content);
+                    mime = "application/msword";
+                    ext = "doc";
+                    break;
+                default:
+                    bytes = SheetExporter.BuildPdf(content);
+                    mime = "application/pdf";
+                    ext = "pdf";
+                    break;
+            }
+
+            var fileName = $"Minute-Sheet-{DateTime.Now:yyyyMMdd-HHmmss}.{ext}";
+            await JS.InvokeVoidAsync("quillInterop.downloadFile", fileName, mime, Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Failed to download {format.ToUpperInvariant()}: {ex.Message}", "Error");
+        }
+        finally
+        {
+            _downloading = false;
+        }
+    }
+
+    private static string HtmlToPlainText(string? html)
+    {
+        if (string.IsNullOrEmpty(html))
+        {
+            return "";
+        }
+        html = System.Text.RegularExpressions.Regex.Replace(html, "<br\\s*/?>", "\n", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        html = System.Text.RegularExpressions.Regex.Replace(html, "</p>", "\n", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        html = System.Text.RegularExpressions.Regex.Replace(html, "<[^>]+>", " ");
+        html = System.Net.WebUtility.HtmlDecode(html);
+        return System.Text.RegularExpressions.Regex.Replace(html, @"[ \t]{2,}", " ").Trim();
     }
 
     public async ValueTask DisposeAsync()

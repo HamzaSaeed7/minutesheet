@@ -26,99 +26,250 @@
     <button type="button" class="seg-tab @(_showPublic ? "active" : "")" @onclick="() => SetView(true)">Public</button>
 </div>
 
-<div class="content-card" style="max-width:none">
+<div class="content-card history-card">
     @if (_sheets is null)
     {
-        <p>Loading...</p>
+        <p class="history-empty">Loading...</p>
     }
     else if (_sheets.Count == 0)
     {
-        <p class="text-muted mb-0">@(_showPublic ? "No public minute sheets available yet." : "You haven't submitted or been assigned to any minute sheets yet.")</p>
+        <div class="history-empty">
+            <div class="history-empty-icon">
+                <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><rect x="3" y="4" width="18" height="17" rx="3"></rect><path d="M8 2v4M16 2v4M3 9h18"></path></svg>
+            </div>
+            <p class="history-empty-text">@(_showPublic ? "No public minute sheets available yet." : "You haven't submitted or been assigned to any minute sheets yet.")</p>
+        </div>
     }
     else
     {
-        <table class="table table-hover align-middle">
-            <thead>
-                <tr>
-                    <th>Date</th>
-                    @if (_showPublic)
-                    {
-                        <th>Created by</th>
-                    }
-                    <th>Category</th>
-                    <th>Status</th>
-                    <th>Approvals</th>
-                    <th>Attachment</th>
-                    <th></th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var sheet in _sheets)
-                {
-                    var status = ApprovalWorkflow.StatusFor(sheet);
-                    var mine = sheet.CreatedByUserId == _userId;
-                    <tr>
-                        <td>@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</td>
-                        @if (_showPublic)
-                        {
-                            <td>@(string.IsNullOrWhiteSpace(sheet.CreatedByUser?.FullName) ? sheet.CreatedByUser?.Email : sheet.CreatedByUser!.FullName)</td>
-                        }
-                        <td>
-                            @(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")
+        <div class="history-toolbar">
+            <div class="ht-search">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                <input type="text" placeholder="Search by category, creator or attachment..." @bind="_search" @bind:event="oninput" @bind:after="ResetFiltersPage" />
+            </div>
+            <div class="ht-filters">
+                <select class="ht-select" @bind="_statusFilter" @bind:after="ResetFiltersPage">
+                    <option value="">All statuses</option>
+                    <option value="Approved">Approved</option>
+                    <option value="Pending">Pending</option>
+                </select>
+                <select class="ht-select" @bind="_categoryFilter" @bind:after="ResetFiltersPage">
+                    <option value="">All categories</option>
+                    <option value="Financial">Financial</option>
+                    <option value="NonFinancial">Non-Financial</option>
+                </select>
+                <select class="ht-select" @bind="_attachmentFilter" @bind:after="ResetFiltersPage">
+                    <option value="">Any attachment</option>
+                    <option value="Yes">With attachment</option>
+                    <option value="No">No attachment</option>
+                </select>
+                <button type="button" class="ht-clear" @onclick="ClearFilters" disabled="@(_search.Length == 0 && _statusFilter.Length == 0 && _categoryFilter.Length == 0 && _attachmentFilter.Length == 0)">Clear</button>
+            </div>
+        </div>
+
+        @if (_filteredSheets.Count == 0)
+        {
+            <div class="history-empty">
+                <div class="history-empty-icon">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                </div>
+                <p class="history-empty-text">No sheets match your search or filters.</p>
+            </div>
+        }
+        else
+        {
+            <div class="history-list">
+            @foreach (var sheet in _pagedSheets)
+            {
+                var status = ApprovalWorkflow.StatusFor(sheet);
+                var mine = sheet.CreatedByUserId == _userId;
+                var done = ApprovalWorkflow.ApprovedCount(sheet.ApprovalSteps);
+                var tot = sheet.ApprovalSteps.Count;
+                var pct = tot > 0 ? (int)Math.Round(done * 100.0 / tot) : 0;
+                var created = sheet.CreatedAt.ToLocalTime();
+                var hasAttachment = !string.IsNullOrEmpty(sheet.AttachmentStoredPath);
+                <div class="history-row">
+                    <div class="history-date">
+                        <span class="hd-day">@created.ToString("dd")</span>
+                        <span class="hd-mon">@created.ToString("MMM yyyy")</span>
+                        <span class="hd-time">@created.ToString("HH:mm")</span>
+                    </div>
+
+                    <div class="history-body">
+                        <div class="history-top">
+                            <span class="history-cat">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial") minute sheet</span>
                             @if (sheet.IsConfidential)
                             {
-                                <span class="badge bg-danger" style="margin-left:6px;" title="Only the creator, listed approvers and admins can view this sheet.">Confidential</span>
+                                <span class="conf-chip" title="Only the creator, listed approvers and admins can view this sheet.">Confidential</span>
                             }
-                        </td>
-                        <td><span class="badge @(status == "Approved" ? "bg-success" : "bg-warning")">@status</span></td>
-                        <td>
-                            @{
-                                var done = ApprovalWorkflow.ApprovedCount(sheet.ApprovalSteps);
-                                var tot = sheet.ApprovalSteps.Count;
-                                var pct = tot > 0 ? (int)Math.Round(done * 100.0 / tot) : 0;
-                            }
-                            <div style="display:flex;align-items:center;gap:8px;">
-                                <span class="progress-mini"><span style="width:@(pct)%;"></span></span>
-                                <span style="font-size:12.5px;color:#565b78;">@done / @tot approved</span>
-                            </div>
-                        </td>
-                        <td>
-                            @if (!string.IsNullOrEmpty(sheet.AttachmentStoredPath))
+                            @if (status == "Approved")
                             {
-                                <a href="@sheet.AttachmentStoredPath" target="_blank">@sheet.AttachmentFileName</a>
+                                <span class="status-pill status-ok">@status</span>
                             }
                             else
                             {
-                                <span class="text-muted">—</span>
+                                <span class="status-pill status-wait">@status</span>
                             }
-                        </td>
-                        <td>
-                            <div class="d-flex gap-2 justify-content-end">
-                                @if (mine && (sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending)
-                                     || sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed)))
-                                {
-                                    <a class="btn btn-sm btn-outline-secondary" href="dashboard/sheet/@sheet.Token/edit">Edit</a>
-                                }
-                                <a class="btn btn-sm btn-outline-primary" href="dashboard/sheet/@sheet.Token">Open</a>
-                                @if (mine)
-                                {
-                                    <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_busy" @onclick="() => DeleteSheet(sheet.Token)">Delete</button>
-                                }
-                            </div>
-                        </td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+                        </div>
+
+                        <div class="history-sub">
+                            @if (_showPublic && !string.IsNullOrWhiteSpace(sheet.CreatedByUser?.FullName))
+                            {
+                                <span class="h-meta">by @sheet.CreatedByUser.FullName</span>
+                            }
+                            @if (hasAttachment)
+                            {
+                                <a class="attach-link" href="@sheet.AttachmentStoredPath" target="_blank">
+                                    <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21.44 11.05l-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"></path></svg>
+                                    @sheet.AttachmentFileName
+                                </a>
+                            }
+                            else
+                            {
+                                <span class="attach-none">No attachment</span>
+                            }
+                            <span class="h-progress">
+                                <span class="h-progress-bar"><span class="h-progress-fill" style="width:@(pct)%"></span></span>
+                                <span class="h-progress-count">@done / @tot approved</span>
+                            </span>
+                        </div>
+                    </div>
+
+                    <div class="history-actions">
+                        @if (mine && (sheet.ApprovalSteps.All(s => s.Status == ApprovalStepStatus.Pending)
+                             || sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed)))
+                        {
+                            <a class="btn-cancel hist-btn btn-ghost" href="dashboard/sheet/@sheet.Token/edit" title="Edit">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 3a2.85 2.85 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5Z"></path></svg>
+                                <span>Edit</span>
+                            </a>
+                        }
+                        <a class="btn-open hist-btn" href="dashboard/sheet/@sheet.Token">Open</a>
+                        @if (mine)
+                        {
+                            <button type="button" class="btn-del hist-btn" disabled="@_busy" @onclick="() => DeleteSheet(sheet.Token)" title="Delete">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"></path></svg>
+                                <span>Delete</span>
+                            </button>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+            @if (_filteredSheets.Count > PageSize)
+            {
+                <div class="history-pagination">
+                    <button type="button" class="pgn-btn" disabled="@(_pageIndex == 0)" @onclick="() => GoToPage(_pageIndex - 1)">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"></path></svg>
+                        <span>Prev</span>
+                    </button>
+                    <div class="pgn-pages">
+                        @foreach (var p in PageNumbers)
+                        {
+                            <button type="button" class="pgn-num @(p == _pageIndex ? "active" : "")" @onclick="() => GoToPage(p)">@(p + 1)</button>
+                        }
+                    </div>
+                    <button type="button" class="pgn-btn" disabled="@(_pageIndex >= TotalPages - 1)" @onclick="() => GoToPage(_pageIndex + 1)">
+                        <span>Next</span>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"></path></svg>
+                    </button>
+                    <span class="pgn-count">Showing @ShownStart–@ShownEnd of @_filteredSheets.Count</span>
+                </div>
+            }
+        }
     }
 </div>
 
 @code {
+    private const int PageSize = 5;
     private List<MinuteSheet>? _sheets;
     private string? _userId;
     private string _userEmail = "";
     private bool _busy;
     private bool _showPublic;
+    private int _pageIndex;
+    private string _search = "";
+    private string _statusFilter = "";
+    private string _categoryFilter = "";
+    private string _attachmentFilter = "";
+
+    private List<MinuteSheet> _filteredSheets =>
+        _sheets?.Where(MatchesFilters).ToList() ?? new();
+
+    private int TotalPages => _filteredSheets is { Count: > 0 }
+        ? (int)Math.Ceiling(_filteredSheets.Count / (double)PageSize)
+        : 1;
+
+    private IEnumerable<MinuteSheet> _pagedSheets =>
+        _filteredSheets.Skip(_pageIndex * PageSize).Take(PageSize).ToList();
+
+    private int ShownStart => _filteredSheets.Count > 0 ? _pageIndex * PageSize + 1 : 0;
+    private int ShownEnd => Math.Min((_pageIndex + 1) * PageSize, _filteredSheets.Count);
+
+    private bool MatchesFilters(MinuteSheet sheet)
+    {
+        if (_statusFilter.Length > 0 && ApprovalWorkflow.StatusFor(sheet) != _statusFilter)
+            return false;
+
+        if (_categoryFilter.Length > 0)
+        {
+            var cat = sheet.Category == SheetCategory.NonFinancial ? "NonFinancial" : "Financial";
+            if (cat != _categoryFilter) return false;
+        }
+
+        if (_attachmentFilter.Length > 0)
+        {
+            var has = !string.IsNullOrEmpty(sheet.AttachmentStoredPath);
+            if (_attachmentFilter == "Yes" && !has) return false;
+            if (_attachmentFilter == "No" && has) return false;
+        }
+
+        var term = _search.Trim();
+        if (term.Length > 0)
+        {
+            var haystack = string.Join(" ", new[]
+            {
+                sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial",
+                sheet.CreatedByUser?.FullName ?? "",
+                sheet.CreatedByUser?.Email ?? "",
+                sheet.AttachmentFileName ?? ""
+            });
+            if (!haystack.Contains(term, StringComparison.OrdinalIgnoreCase)) return false;
+        }
+
+        return true;
+    }
+
+    private void ResetFiltersPage() => _pageIndex = 0;
+
+    private void ClearFilters()
+    {
+        _search = "";
+        _statusFilter = "";
+        _categoryFilter = "";
+        _attachmentFilter = "";
+        _pageIndex = 0;
+    }
+
+    private IEnumerable<int> PageNumbers
+    {
+        get
+        {
+            var pages = TotalPages;
+            var current = _pageIndex;
+            var start = Math.Max(0, current - 1);
+            var end = Math.Min(pages - 1, start + 4);
+            start = Math.Max(0, end - 4);
+            for (var i = start; i <= end; i++) yield return i;
+        }
+    }
+
+    private void GoToPage(int page)
+    {
+        if (page < 0 || page >= TotalPages) return;
+        _pageIndex = page;
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -138,6 +289,7 @@
     private async Task SetView(bool showPublic)
     {
         _showPublic = showPublic;
+        _pageIndex = 0;
         await LoadAsync();
     }
 
@@ -197,6 +349,7 @@
             }
 
             await LoadAsync();
+            _pageIndex = Math.Clamp(_pageIndex, 0, Math.Max(0, TotalPages - 1));
             ToastService.ShowSuccess("The minute sheet was deleted permanently.", "Sheet deleted");
         }
 

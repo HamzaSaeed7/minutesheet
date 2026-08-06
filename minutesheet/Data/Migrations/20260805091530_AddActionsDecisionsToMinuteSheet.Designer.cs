@@ -3,17 +3,20 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using minutesheet.Data;
 
 #nullable disable
 
-namespace minutesheet.Migrations
+namespace minutesheet.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260805091530_AddActionsDecisionsToMinuteSheet")]
+    partial class AddActionsDecisionsToMinuteSheet
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -422,78 +425,6 @@ namespace minutesheet.Migrations
                     b.ToTable("Comments");
                 });
 
-            modelBuilder.Entity("minutesheet.Data.SheetShare", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("MinuteSheetId")
-                        .HasColumnType("int");
-
-                    b.Property<DateTime>("SharedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<string>("SharedByUserId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("SharedWithEmail")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MinuteSheetId");
-
-                    b.HasIndex("SharedByUserId");
-
-                    b.ToTable("SheetShares");
-                });
-
-            modelBuilder.Entity("minutesheet.Data.SheetSuggestion", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("AuthorName")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("nvarchar(256)");
-
-                    b.Property<string>("AuthorUserId")
-                        .IsRequired()
-                        .HasColumnType("nvarchar(450)");
-
-                    b.Property<string>("Body")
-                        .IsRequired()
-                        .HasMaxLength(2000)
-                        .HasColumnType("nvarchar(2000)");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime2");
-
-                    b.Property<bool>("IsAllOk")
-                        .HasColumnType("bit");
-
-                    b.Property<int>("MinuteSheetId")
-                        .HasColumnType("int");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("AuthorUserId");
-
-                    b.HasIndex("MinuteSheetId");
-
-                    b.ToTable("SheetSuggestions");
-                });
-
             modelBuilder.Entity("Microsoft.AspNetCore.Identity.IdentityRoleClaim<string>", b =>
                 {
                     b.HasOne("Microsoft.AspNetCore.Identity.IdentityRole", null)
@@ -584,44 +515,6 @@ namespace minutesheet.Migrations
                         .HasForeignKey("MinuteSheetId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
-
-                    b.Navigation("MinuteSheet");
-                });
-
-            modelBuilder.Entity("minutesheet.Data.SheetShare", b =>
-                {
-                    b.HasOne("minutesheet.Data.MinuteSheet", "MinuteSheet")
-                        .WithMany()
-                        .HasForeignKey("MinuteSheetId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.HasOne("minutesheet.Data.ApplicationUser", "SharedByUser")
-                        .WithMany()
-                        .HasForeignKey("SharedByUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("MinuteSheet");
-
-                    b.Navigation("SharedByUser");
-                });
-
-            modelBuilder.Entity("minutesheet.Data.SheetSuggestion", b =>
-                {
-                    b.HasOne("minutesheet.Data.ApplicationUser", "AuthorUser")
-                        .WithMany()
-                        .HasForeignKey("AuthorUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("minutesheet.Data.MinuteSheet", "MinuteSheet")
-                        .WithMany()
-                        .HasForeignKey("MinuteSheetId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("AuthorUser");
 
                     b.Navigation("MinuteSheet");
                 });

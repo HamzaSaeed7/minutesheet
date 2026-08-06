@@ -88,6 +88,11 @@
                         <div class="form-text">You can't change your own role.</div>
                     }
                 </div>
+                <div class="col-md-4">
+                    <label class="form-label">Phone number <span class="text-muted" style="font-weight:400;">(optional)</span></label>
+                    <InputText @bind-Value="Input.PhoneNumber" class="form-control" autocomplete="off" placeholder="Phone number" />
+                    <ValidationMessage For="() => Input.PhoneNumber" class="text-danger" />
+                </div>
             </div>
 
             <div class="d-flex gap-2 mt-4">
@@ -137,6 +142,7 @@
             EmployeeNo = _user.EmployeeNo,
             Designation = _user.Designation,
             DepartmentId = _user.DepartmentId,
+            PhoneNumber = _user.PhoneNumber,
             Role = isAdmin ? Roles.Admin : Roles.Employee
         };
     }
@@ -179,6 +185,7 @@
             _user.EmployeeNo = Input.EmployeeNo;
             _user.Designation = Input.Designation;
             _user.DepartmentId = Input.DepartmentId;
+            _user.PhoneNumber = Input.PhoneNumber;
 
             var update = await UserManager.UpdateAsync(_user);
             if (!update.Succeeded)
@@ -273,6 +280,10 @@
         [Required(ErrorMessage = "Please select a department.")]
         [Display(Name = "Department")]
         public int? DepartmentId { get; set; }
+
+        [Phone]
+        [Display(Name = "Phone number")]
+        public string? PhoneNumber { get; set; }
 
         [Required]
         public string Role { get; set; } = Roles.Employee;
