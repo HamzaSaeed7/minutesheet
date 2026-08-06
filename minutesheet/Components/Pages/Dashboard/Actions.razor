@@ -75,12 +75,38 @@ else
             }
         }
     </div>
+
+    <div class="act-section">Shared with me</div>
+    <div class="act-card">
+        @if (_shared.Count == 0)
+        {
+            <div class="act-empty">Nothing has been shared with you.</div>
+        }
+        else
+        {
+            <div class="act-head" style="grid-template-columns:1.3fr 1.3fr 1fr 1fr 90px;">
+                <div>Shared</div><div>From</div><div>Category</div><div>Visibility</div><div></div>
+            </div>
+            @foreach (var share in _shared)
+            {
+                var sheet = share.MinuteSheet!;
+                <div class="act-row" style="grid-template-columns:1.3fr 1.3fr 1fr 1fr 90px;">
+                    <div>@share.SharedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
+                    <div style="color:#565b78;">@SharerName(share)</div>
+                    <div style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
+                    <div><span class="badge @(sheet.IsConfidential ? "bg-danger" : "bg-secondary")">@(sheet.IsConfidential ? "Confidential" : "Non-confidential")</span></div>
+                    <div><a class="btn btn-sm btn-primary" href="dashboard/sheet/@sheet.Token">Open</a></div>
+                </div>
+            }
+        }
+    </div>
 }
 
 @code {
     private bool _loading = true;
     private List<ApprovalStep> _pending = new();
     private List<MinuteSheet> _toResolve = new();
+    private List<SheetShare> _shared = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -114,8 +140,20 @@ else
             .OrderByDescending(m => m.CreatedAt)
             .ToListAsync();
 
+        _shared = await DbContext.SheetShares
+            .Where(s => s.SharedWithEmail == myEmail)
+            .Include(s => s.MinuteSheet!).ThenInclude(m => m.CreatedByUser)
+            .Include(s => s.SharedByUser)
+            .OrderByDescending(s => s.SharedAt)
+            .ToListAsync();
+
         _loading = false;
     }
+
+    private static string SharerName(SheetShare share) =>
+        share.SharedByUser is null
+            ? "—"
+            : (string.IsNullOrWhiteSpace(share.SharedByUser.FullName) ? share.SharedByUser.Email ?? "—" : share.SharedByUser.FullName);
 
     private static string CreatorName(MinuteSheet sheet) =>
         sheet.CreatedByUser is null

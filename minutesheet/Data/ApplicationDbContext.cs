@@ -9,6 +9,8 @@ namespace minutesheet.Data
         public DbSet<MinuteSheet> MinuteSheets => Set<MinuteSheet>();
         public DbSet<ApprovalStep> ApprovalSteps => Set<ApprovalStep>();
         public DbSet<SheetComment> Comments => Set<SheetComment>();
+        public DbSet<SheetShare> SheetShares => Set<SheetShare>();
+        public DbSet<SheetSuggestion> SheetSuggestions => Set<SheetSuggestion>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -41,6 +43,30 @@ namespace minutesheet.Data
                 .WithMany(m => m.Comments)
                 .HasForeignKey(c => c.MinuteSheetId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<SheetShare>()
+                .HasOne(s => s.MinuteSheet)
+                .WithMany()
+                .HasForeignKey(s => s.MinuteSheetId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<SheetShare>()
+                .HasOne(s => s.SharedByUser)
+                .WithMany()
+                .HasForeignKey(s => s.SharedByUserId)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            builder.Entity<SheetSuggestion>()
+                .HasOne(s => s.MinuteSheet)
+                .WithMany()
+                .HasForeignKey(s => s.MinuteSheetId)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            builder.Entity<SheetSuggestion>()
+                .HasOne(s => s.AuthorUser)
+                .WithMany()
+                .HasForeignKey(s => s.AuthorUserId)
+                .OnDelete(DeleteBehavior.Restrict);
 
             builder.Entity<Department>().HasData(
                 new Department { Id = 1, Name = "HR", EmployeeCount = 0 },

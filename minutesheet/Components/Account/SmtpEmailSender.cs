@@ -64,7 +64,8 @@ namespace minutesheet.Components.Account
 
         // Generic workflow notification (approval requested / review left / review resolved).
         // Never throws so a mail failure can't break the workflow action that triggered it.
-        public async Task<bool> SendSheetNotificationAsync(string email, string subject, string message, string link)
+        public async Task<bool> SendSheetNotificationAsync(string email, string subject, string message, string link,
+            byte[]? attachmentBytes = null, string? attachmentName = null)
         {
             var body = $"""
                 <div style="font-family:'Poppins',Arial,sans-serif;max-width:480px;margin:auto;padding:24px;color:#1a1a1a">
@@ -73,12 +74,13 @@ namespace minutesheet.Components.Account
                     <p style="margin:24px 0">
                         <a href="{link}" style="background:#000066;color:#fff;text-decoration:none;padding:12px 20px;border-radius:8px;display:inline-block">Open the minute sheet</a>
                     </p>
+                    {(attachmentBytes is null ? "" : "<p style=\"color:#666;font-size:13px\">A PDF copy of the minute sheet is attached to this email.</p>")}
                     <p style="color:#666;font-size:13px">If the button doesn't work, paste this link into your browser:<br>{link}</p>
                 </div>
                 """;
             try
             {
-                await SendAsync(email, subject, body);
+                await SendAsync(email, subject, body, attachmentBytes, attachmentName);
                 return true;
             }
             catch (Exception ex)
@@ -100,15 +102,15 @@ namespace minutesheet.Components.Account
             SendAsync(email, "Reset your password",
                 $"Please reset your password using the following code: {resetCode}");
 
-        private Task SendAsync(string to, string subject, string htmlBody)
+        private Task SendAsync(string to, string subject, string htmlBody, byte[]? attachmentBytes = null, string? attachmentName = null)
         {
             if (!string.IsNullOrWhiteSpace(_settings.ApiKey))
             {
-                return SendViaBrevoApiAsync(to, subject, htmlBody);
+                return SendViaBrevoApiAsync(to, subject, htmlBody, attachmentBytes, attachmentName);
             }
             if (!string.IsNullOrWhiteSpace(_settings.Host))
             {
-                return SendViaSmtpAsync(to, subject, htmlBody);
+                return SendViaSmtpAsync(to, subject, htmlBody, attachmentBytes, attachmentName);
             }
 
             logger.LogWarning(
@@ -117,16 +119,29 @@ namespace minutesheet.Components.Account
             return Task.CompletedTask;
         }
 
-        private async Task SendViaBrevoApiAsync(string to, string subject, string htmlBody)
+        private async Task SendViaBrevoApiAsync(string to, string subject, string htmlBody,
+            byte[]? attachmentBytes = null, string? attachmentName = null)
         {
             var from = string.IsNullOrWhiteSpace(_settings.From) ? _settings.User : _settings.From;
-            var payload = new
+            var payload = new Dictionary<string, object?>
             {
-                sender = new { email = from, name = _settings.FromName },
-                to = new[] { new { email = to } },
-                subject,
-                htmlContent = htmlBody
+                ["sender"] = new { email = from, name = _settings.FromName },
+                ["to"] = new[] { new { email = to } },
+                ["subject"] = subject,
+                ["htmlContent"] = htmlBody
             };
+
+            if (attachmentBytes is not null && attachmentBytes.Length > 0)
+            {
+                payload["attachment"] = new[]
+                {
+                    new
+                    {
+                        content = Convert.ToBase64String(attachmentBytes),
+                        name = string.IsNullOrWhiteSpace(attachmentName) ? "minute-sheet.pdf" : attachmentName
+                    }
+                };
+            }
 
             using var http = httpClientFactory.CreateClient();
             http.Timeout = TimeSpan.FromSeconds(20);
@@ -144,13 +159,22 @@ namespace minutesheet.Components.Account
             }
         }
 
-        private async Task SendViaSmtpAsync(string to, string subject, string htmlBody)
+        private async Task SendViaSmtpAsync(string to, string subject, string htmlBody,
+            byte[]? attachmentBytes = null, string? attachmentName = null)
         {
+            var builder = new BodyBuilder { HtmlBody = htmlBody };
+            if (attachmentBytes is not null && attachmentBytes.Length > 0)
+            {
+                builder.Attachments.Add(
+                    string.IsNullOrWhiteSpace(attachmentName) ? "minute-sheet.pdf" : attachmentName,
+                    attachmentBytes);
+            }
+
             var message = new MimeMessage();
             message.From.Add(new MailboxAddress(_settings.FromName, string.IsNullOrWhiteSpace(_settings.From) ? _settings.User : _settings.From));
             message.To.Add(MailboxAddress.Parse(to));
             message.Subject = subject;
-            message.Body = new BodyBuilder { HtmlBody = htmlBody }.ToMessageBody();
+            message.Body = builder.ToMessageBody();
 
             using var client = new SmtpClient { Timeout = 20000 }; // 20s so a network stall can't hang the request
             var socketOptions = _settings.EnableSsl

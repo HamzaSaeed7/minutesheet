@@ -2,8 +2,10 @@ using System.Threading.Channels;
 
 namespace minutesheet.Components.Account
 {
-    // One queued notification email.
-    public sealed record EmailJob(string To, string Subject, string Message, string Link);
+    // One queued notification email. AttachmentBytes/AttachmentName are optional
+    // (e.g. a PDF copy of a shared minute sheet).
+    public sealed record EmailJob(string To, string Subject, string Message, string Link,
+        byte[]? AttachmentBytes = null, string? AttachmentName = null);
 
     // Hands outbound notification mail to a background sender so a user action
     // (submitting a sheet, approving a step) returns as soon as the data is saved
