@@ -13,6 +13,12 @@ namespace minutesheet.Data
         
         public string? Summary { get; set; }
 
+        // Extracted action items stored as JSON string.
+        public string? ActionItems { get; set; }
+
+        // Generated next meeting agenda stored as JSON string.
+        public string? NextMeetingAgenda { get; set; }
+
         // Original file name as uploaded by the user (null when no attachment).
         [MaxLength(260)]
         public string? AttachmentFileName { get; set; }

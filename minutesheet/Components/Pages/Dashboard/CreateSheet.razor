@@ -86,12 +86,58 @@ else
                 }
             </div>
             <div class="d-flex flex-column" style="margin-top: 16px; gap: 8px;">
-                <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingSummary" @onclick="GenerateSummaryAsync">
-                    @(_generatingSummary ? "Generating Summary..." : "Generate Summary")
-                </button>
+                <div class="d-flex gap-2">
+                    <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingSummary" @onclick="GenerateSummaryAsync">
+                        @(_generatingSummary ? "Generating Summary..." : "Generate Summary")
+                    </button>
+                    <button type="button" class="btn btn-outline-primary" style="font-family: 'Poppins', sans-serif;" disabled="@_generatingActionItems" @onclick="ExtractTasksAsync">
+                        @(_generatingActionItems ? "Extracting Tasks..." : "Extract Tasks")
+                    </button>
+                    <button type="button" class="btn btn-outline-success" style="font-family: 'Poppins', sans-serif;" disabled="@_generatingAgenda" @onclick="GenerateAgendaAsync">
+                        @(_generatingAgenda ? "Suggesting Agenda..." : "Suggest Agenda")
+                    </button>
+                </div>
                 @if (!string.IsNullOrEmpty(_summary))
                 {
                     <textarea class="form-control" rows="4" readonly style="font-family: 'Poppins', sans-serif; font-size: 14px;">@_summary</textarea>
+                }
+                
+                @if (_actionItems.Any())
+                {
+                    <div class="mt-2 p-3" style="background-color: #f8f9fa; border-radius: 6px;">
+                        <h6 style="color: #000066; font-weight: 600;">Extracted Action Items</h6>
+                        <small class="text-muted d-block mb-2">You can manually edit this list before submitting.</small>
+                        
+                        @foreach (var item in _actionItems)
+                        {
+                            <div class="d-flex gap-2 mb-2">
+                                <input type="text" class="form-control form-control-sm" @bind="item.Task" placeholder="Task" />
+                                <input type="text" class="form-control form-control-sm" @bind="item.Owner" placeholder="Owner" style="max-width: 150px;" />
+                                <input type="text" class="form-control form-control-sm" @bind="item.Deadline" placeholder="Deadline" style="max-width: 150px;" />
+                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _actionItems.Remove(item)">&times;</button>
+                            </div>
+                        }
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-1" @onclick="() => _actionItems.Add(new minutesheet.Services.ActionItemDto())">+ Add Item</button>
+                    </div>
+                }
+                
+                @if (_agendaItems.Any())
+                {
+                    <div class="mt-2 p-3" style="background-color: #f8f9fa; border-radius: 6px;">
+                        <h6 style="color: #000066; font-weight: 600;">Suggested Next-Meeting Agenda</h6>
+                        <small class="text-muted d-block mb-2">You can manually edit this agenda before submitting.</small>
+                        
+                        @foreach (var item in _agendaItems)
+                        {
+                            <div class="d-flex gap-2 mb-2">
+                                <input type="text" class="form-control form-control-sm" @bind="item.Topic" placeholder="Topic" />
+                                <input type="text" class="form-control form-control-sm" @bind="item.Owner" placeholder="Owner" style="max-width: 150px;" />
+                                <input type="text" class="form-control form-control-sm" @bind="item.TimeBox" placeholder="Time box (e.g. 10 mins)" style="max-width: 150px;" />
+                                <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _agendaItems.Remove(item)">&times;</button>
+                            </div>
+                        }
+                        <button type="button" class="btn btn-sm btn-outline-secondary mt-1" @onclick="() => _agendaItems.Add(new minutesheet.Services.AgendaItemDto())">+ Add Agenda Item</button>
+                    </div>
                 }
             </div>
         </div>
@@ -242,6 +288,10 @@ else
     private string _initialDescriptionHtml = "";
     private string? _summary;
     private bool _generatingSummary;
+    private List<minutesheet.Services.ActionItemDto> _actionItems = new();
+    private bool _generatingActionItems;
+    private List<minutesheet.Services.AgendaItemDto> _agendaItems = new();
+    private bool _generatingAgenda;
 
     private SheetCategory _category = SheetCategory.Financial;
     private readonly List<ApprovalRow> _rows = new() { new ApprovalRow { Action = ApprovalAction.Review } };
@@ -304,6 +354,16 @@ else
                     _existingAttachmentName = sheet.AttachmentFileName;
                     _existingAttachmentPath = sheet.AttachmentStoredPath;
                     _summary = sheet.Summary;
+                    if (!string.IsNullOrEmpty(sheet.ActionItems))
+                    {
+                        try { _actionItems = System.Text.Json.JsonSerializer.Deserialize<List<minutesheet.Services.ActionItemDto>>(sheet.ActionItems) ?? new(); }
+                        catch { _actionItems = new(); }
+                    }
+                    if (!string.IsNullOrEmpty(sheet.NextMeetingAgenda))
+                    {
+                        try { _agendaItems = System.Text.Json.JsonSerializer.Deserialize<List<minutesheet.Services.AgendaItemDto>>(sheet.NextMeetingAgenda) ?? new(); }
+                        catch { _agendaItems = new(); }
+                    }
                     _rows.Clear();
                     _lockedSteps.Clear();
                     foreach (var step in sheet.ApprovalSteps.OrderBy(s => s.StepIndex))
@@ -474,6 +534,8 @@ else
                 sheet.Category = _category;
                 sheet.DescriptionHtml = descriptionHtml;
                 sheet.Summary = _summary;
+                sheet.ActionItems = _actionItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_actionItems) : null;
+                sheet.NextMeetingAgenda = _agendaItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_agendaItems) : null;
 
                 // Only rebuild the workflow while every step is still pending. Once
                 // approvals are underway (reviews to resolve), the steps are locked
@@ -500,12 +562,23 @@ else
 
                 if (allPending)
                 {
+                    var actionItemsText = "";
+                    if (_actionItems.Any())
+                    {
+                        actionItemsText = "\n\nAction Items:\n" + string.Join("\n", _actionItems.Select(i => $"- [ ] {i.Task} (Owner: {i.Owner}, Deadline: {i.Deadline})"));
+                    }
+                    var agendaText = "";
+                    if (_agendaItems.Any())
+                    {
+                        agendaText = "\n\nNext Meeting Agenda:\n" + string.Join("\n", _agendaItems.Select(i => $"- {i.Topic} (Owner: {i.Owner}, Time: {i.TimeBox})"));
+                    }
+
                     foreach (var email in _rows.Select(r => r.ApproverEmail).Distinct(StringComparer.OrdinalIgnoreCase))
                     {
                         EmailQueue.Enqueue(new EmailJob(
                             email,
                             "A minute sheet was updated",
-                            $"{createdBy} updated a minute sheet that needs your review or approval.",
+                            $"{createdBy} updated a minute sheet that needs your review or approval.{actionItemsText}{agendaText}",
                             link));
                     }
                 }
@@ -519,6 +592,8 @@ else
                     Category = _category,
                     DescriptionHtml = descriptionHtml,
                     Summary = _summary,
+                    ActionItems = _actionItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_actionItems) : null,
+                    NextMeetingAgenda = _agendaItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_agendaItems) : null,
                     AttachmentFileName = originalName,
                     AttachmentStoredPath = storedPath,
                     CreatedByUserId = user.Id,
@@ -544,12 +619,24 @@ else
 
                 // Queue the unique sheet link to each distinct approver.
                 link = NavigationManager.ToAbsoluteUri($"dashboard/sheet/{sheetToken}").AbsoluteUri;
+                
+                var actionItemsText = "";
+                if (_actionItems.Any())
+                {
+                    actionItemsText = "\n\nAction Items:\n" + string.Join("\n", _actionItems.Select(i => $"- [ ] {i.Task} (Owner: {i.Owner}, Deadline: {i.Deadline})"));
+                }
+                var agendaText = "";
+                if (_agendaItems.Any())
+                {
+                    agendaText = "\n\nNext Meeting Agenda:\n" + string.Join("\n", _agendaItems.Select(i => $"- {i.Topic} (Owner: {i.Owner}, Time: {i.TimeBox})"));
+                }
+
                 foreach (var email in _rows.Select(r => r.ApproverEmail).Distinct(StringComparer.OrdinalIgnoreCase))
                 {
                     EmailQueue.Enqueue(new EmailJob(
                         email,
                         "A minute sheet needs your approval",
-                        $"{createdBy} submitted a minute sheet that needs your review or approval.",
+                        $"{createdBy} submitted a minute sheet that needs your review or approval.{actionItemsText}{agendaText}",
                         link));
                 }
 
@@ -646,6 +733,60 @@ else
         finally
         {
             _generatingSummary = false;
+        }
+    }
+
+    private async Task ExtractTasksAsync()
+    {
+        _error = null;
+        _generatingActionItems = true;
+        try
+        {
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+            string plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
+            
+            var resultJson = await SummarizationService.ExtractActionItemsAsync(plainText);
+            
+            var response = System.Text.Json.JsonSerializer.Deserialize<minutesheet.Services.ActionItemsResponseDto>(resultJson);
+            if (response?.ActionItems != null)
+            {
+                _actionItems = response.ActionItems;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to extract tasks: {ex.Message}";
+        }
+        finally
+        {
+            _generatingActionItems = false;
+        }
+    }
+
+    private async Task GenerateAgendaAsync()
+    {
+        _error = null;
+        _generatingAgenda = true;
+        try
+        {
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+            string plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
+            
+            var resultJson = await SummarizationService.GenerateAgendaAsync(plainText);
+            
+            var response = System.Text.Json.JsonSerializer.Deserialize<minutesheet.Services.AgendaResponseDto>(resultJson);
+            if (response?.AgendaItems != null)
+            {
+                _agendaItems = response.AgendaItems;
+            }
+        }
+        catch (Exception ex)
+        {
+            _error = $"Failed to suggest agenda: {ex.Message}";
+        }
+        finally
+        {
+            _generatingAgenda = false;
         }
     }
 

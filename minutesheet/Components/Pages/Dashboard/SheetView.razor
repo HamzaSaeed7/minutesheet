@@ -92,6 +92,65 @@ else
             </div>
         }
 
+        @if (!string.IsNullOrEmpty(_sheet.ActionItems))
+        {
+            var items = System.Text.Json.JsonSerializer.Deserialize<List<minutesheet.Services.ActionItemDto>>(_sheet.ActionItems);
+            if (items != null && items.Any())
+            {
+                <div class="mb-3">
+                    <div class="creator-label mb-1" style="color: #000066; font-weight: 600;">Action Items</div>
+                    <div class="description-body" style="font-family: 'Poppins', sans-serif; background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
+                        <ul style="list-style: none; padding-left: 0; margin-bottom: 0;">
+                            @foreach (var item in items)
+                            {
+                                <li style="margin-bottom: 6px;">
+                                    <input type="checkbox" disabled style="margin-right: 8px;" />
+                                    <strong>@item.Task</strong>
+                                    @if (!string.IsNullOrEmpty(item.Owner))
+                                    {
+                                        <span class="text-muted" style="margin-left: 8px; font-size: 13px;">(Owner: @item.Owner)</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(item.Deadline))
+                                    {
+                                        <span class="text-muted" style="margin-left: 8px; font-size: 13px;">(Deadline: @item.Deadline)</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
+        }
+
+        @if (!string.IsNullOrEmpty(_sheet.NextMeetingAgenda))
+        {
+            var agenda = System.Text.Json.JsonSerializer.Deserialize<List<minutesheet.Services.AgendaItemDto>>(_sheet.NextMeetingAgenda);
+            if (agenda != null && agenda.Any())
+            {
+                <div class="mb-3">
+                    <div class="creator-label mb-1" style="color: #000066; font-weight: 600;">Next Meeting Agenda</div>
+                    <div class="description-body" style="font-family: 'Poppins', sans-serif; background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
+                        <ul style="list-style: none; padding-left: 0; margin-bottom: 0;">
+                            @foreach (var item in agenda)
+                            {
+                                <li style="margin-bottom: 6px;">
+                                    <strong>@item.Topic</strong>
+                                    @if (!string.IsNullOrEmpty(item.Owner))
+                                    {
+                                        <span class="text-muted" style="margin-left: 8px; font-size: 13px;">(Owner: @item.Owner)</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(item.TimeBox))
+                                    {
+                                        <span class="text-muted" style="margin-left: 8px; font-size: 13px;">(Time: @item.TimeBox)</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
+        }
+
         <div class="mb-3">
             <div class="creator-label mb-1">Description</div>
             <div class="description-body">@((MarkupString)_sheet.DescriptionHtml)</div>
