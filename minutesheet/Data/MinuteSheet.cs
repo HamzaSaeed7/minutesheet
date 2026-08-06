@@ -6,6 +6,11 @@ namespace minutesheet.Data
     {
         public int Id { get; set; }
 
+        // Short human-readable title; a sheet is referenced by this across the app.
+        [Required]
+        [MaxLength(200)]
+        public string Title { get; set; } = "";
+
         public SheetCategory Category { get; set; }
 
         // Rich-text HTML produced by the Quill editor.

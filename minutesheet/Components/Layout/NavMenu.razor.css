@@ -186,7 +186,7 @@
 .nav-scrollable { display: none; }
 .navbar-toggler:checked ~ .nav-scrollable { display: flex; }
 
-@media (min-width: 641px) {
+@media (min-width: 992px) {
     .navbar-toggler { display: none; }
 
     .nav-scrollable {

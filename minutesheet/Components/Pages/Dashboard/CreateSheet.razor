@@ -51,21 +51,27 @@ else
         }
 
         <div class="content-card">
-            <div class="seg-row">
-                <div class="seg-col">
-                    <div class="card-eyebrow" style="margin-bottom:10px;">Category</div>
-                    <div class="seg-tabs">
-                        <button type="button" class="seg-tab @(_category == SheetCategory.Financial ? "active" : "")" @onclick="() => _category = SheetCategory.Financial">Financial</button>
-                        <button type="button" class="seg-tab @(_category == SheetCategory.NonFinancial ? "active" : "")" @onclick="() => _category = SheetCategory.NonFinancial">Non-Financial</button>
-                    </div>
-                </div>
-                <div class="seg-col">
-                    <div class="card-eyebrow" style="margin-bottom:10px;">Confidentiality</div>
-                    <div class="seg-tabs">
-                        <button type="button" class="seg-tab @(!_isConfidential ? "active" : "")" @onclick="() => _isConfidential = false">Non-Confidential</button>
-                        <button type="button" class="seg-tab @(_isConfidential ? "active" : "")" @onclick="() => _isConfidential = true">Confidential</button>
-                    </div>
-                </div>
+            <div class="card-eyebrow" style="margin-bottom:10px;">Title</div>
+            <input type="text" class="form-control" maxlength="200" placeholder="Give this minute sheet a title"
+                   @bind="_title" @bind:event="oninput" />
+        </div>
+
+        <div class="content-card">
+            <div class="card-eyebrow" style="margin-bottom:10px;">Category</div>
+            <div class="seg-tabs">
+                <button type="button" class="seg-tab @(_category == SheetCategory.Financial ? "active" : "")" @onclick="() => _category = SheetCategory.Financial">Financial</button>
+                <button type="button" class="seg-tab @(_category == SheetCategory.NonFinancial ? "active" : "")" @onclick="() => _category = SheetCategory.NonFinancial">Non-Financial</button>
+            </div>
+        </div>
+
+        <div class="content-card">
+            <div class="card-eyebrow" style="margin-bottom:10px;">Confidentiality</div>
+            <div class="seg-tabs">
+                <button type="button" class="seg-tab @(!_isConfidential ? "active" : "")" @onclick="() => _isConfidential = false">Non-Confidential</button>
+                <button type="button" class="seg-tab @(_isConfidential ? "active" : "")" @onclick="() => _isConfidential = true">Confidential</button>
+            </div>
+            <div style="font-size:12.5px;color:#9296ab;margin-top:10px;">
+                Non-confidential sheets can be viewed by every user. Confidential sheets can only be viewed by you, the approvers listed below, and admins.
             </div>
         </div>
 
@@ -377,6 +383,7 @@ else
     private List<minutesheet.Services.AgendaItemDto> _agendaItems = new();
     private bool _generatingAgenda;
 
+    private string _title = "";
     private SheetCategory _category = SheetCategory.Financial;
     private bool _isConfidential;
     private readonly List<ApprovalRow> _rows = new() { new ApprovalRow { Action = ApprovalAction.Review } };
@@ -442,6 +449,7 @@ else
                 else
                 {
                     creatorId = sheet.CreatedByUserId;
+                    _title = sheet.Title;
                     _category = sheet.Category;
                     _isConfidential = sheet.IsConfidential;
                     _initialDescriptionHtml = sheet.DescriptionHtml;
@@ -553,6 +561,12 @@ else
         _saving = true;
         try
         {
+            if (string.IsNullOrWhiteSpace(_title))
+            {
+                ToastService.ShowError("Please enter a title.", "Missing title");
+                return;
+            }
+
             var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
 
             if (string.IsNullOrWhiteSpace(descriptionHtml))
@@ -626,6 +640,7 @@ else
                     sheet.AttachmentFileName = originalName;
                 }
 
+                sheet.Title = _title.Trim();
                 sheet.Category = _category;
                 sheet.IsConfidential = _isConfidential;
                 sheet.DescriptionHtml = descriptionHtml;
@@ -686,6 +701,7 @@ else
             {
                 var sheet = new MinuteSheet
                 {
+                    Title = _title.Trim(),
                     Category = _category,
                     IsConfidential = _isConfidential,
                     DescriptionHtml = descriptionHtml,
@@ -997,12 +1013,24 @@ else
         try
         {
             var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
-            string plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
-            
-            var resultJson = await SummarizationService.GenerateAgendaAsync(plainText);
-            
-            var response = System.Text.Json.JsonSerializer.Deserialize<minutesheet.Services.AgendaResponseDto>(resultJson);
-            if (response?.AgendaItems != null)
+
+            var content = new SheetExporter.ExportContent(
+                Title: string.IsNullOrWhiteSpace(_title) ? $"Minute Sheet - {_category}" : _title.Trim(),
+                Category: _category.ToString(),
+                Confidentiality: _isConfidential ? "Confidential" : "Non-Confidential",
+                Date: DateTime.Now.ToString("dd MMM yyyy hh:mm tt"),
+                PreparedBy: _creator is null
+                    ? "-"
+                    : string.IsNullOrWhiteSpace(_creator.FullName)
+                        ? _creator.Email
+                        : $"{_creator.FullName} ({_creator.Email})",
+                Description: HtmlToPlainText(descriptionHtml),
+                Summary: _summary);
+
+            byte[] bytes;
+            string mime;
+            string ext;
+            switch (format)
             {
                 _agendaItems = response.AgendaItems;
             }
@@ -1083,6 +1111,64 @@ else
         catch (Exception ex)
         {
             ToastService.ShowError($"Export failed: {ex.Message}");
+        }
+        finally
+        {
+            _downloading = false;
+        }
+    }
+
+    private bool _downloading;
+
+    private async Task<SheetExporter.ExportContent> BuildExportContentAsync()
+    {
+        var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+        var plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
+
+        var preparedBy = _creator is not null && !string.IsNullOrWhiteSpace(_creator.FullName)
+            ? _creator.FullName
+            : _creator?.Email ?? "";
+
+        return new SheetExporter.ExportContent(
+            Title: "Minute Sheet",
+            Category: _category.ToString(),
+            Confidentiality: _isConfidential ? "Confidential" : "Non-Confidential",
+            Date: DateTime.Now.ToString("dd MMM yyyy"),
+            PreparedBy: preparedBy,
+            Description: plainText,
+            Summary: _summary ?? "");
+    }
+
+    private async Task DownloadDocxAsync()
+    {
+        await DownloadAsync("minute-sheet.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            c => SheetExporter.BuildDocx(c));
+    }
+
+    private async Task DownloadDocAsync()
+    {
+        await DownloadAsync("minute-sheet.doc", "application/msword",
+            c => SheetExporter.BuildDoc(c));
+    }
+
+    private async Task DownloadPdfAsync()
+    {
+        await DownloadAsync("minute-sheet.pdf", "application/pdf",
+            c => SheetExporter.BuildPdf(c));
+    }
+
+    private async Task DownloadAsync(string fileName, string mimeType, Func<SheetExporter.ExportContent, byte[]> build)
+    {
+        _downloading = true;
+        try
+        {
+            var content = await BuildExportContentAsync();
+            var bytes = build(content);
+            await JS.InvokeVoidAsync("quillInterop.downloadFile", fileName, mimeType, Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Could not download: {ex.Message}", "Error");
         }
         finally
         {
