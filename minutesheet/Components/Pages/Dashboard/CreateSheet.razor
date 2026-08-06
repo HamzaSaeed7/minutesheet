@@ -73,12 +73,11 @@ else
             <div class="d-flex align-items-center justify-content-between" style="margin-bottom:10px;">
                 <div class="card-eyebrow">Description</div>
                 <div class="d-flex align-items-center" style="gap:8px;">
-                    <select id="dictateLang" class="form-select form-select-sm" style="width:auto;" aria-label="Dictation language">
+                    <select id="dictateLang" class="form-select form-select-sm" style="width:auto;" aria-label="Dictation language" @bind="_dictationLanguage">
                         <option value="en-US">English</option>
                         <option value="ur-PK">Urdu</option>
                     </select>
-                    <button type="button" class="dictate-btn"
-                            onclick="quillInterop.toggleDictation('editor', this, document.getElementById('dictateLang').value)"
+                    <button type="button" class="dictate-btn" @ref="_dictateBtn" @onclick="HandleDictation"
                             aria-label="Dictate description" title="Dictate with your voice">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
                         <span class="dictate-label">Dictate</span>
@@ -386,6 +385,9 @@ else
     private string? _error;
     private bool _saving;
     private bool _downloading;
+    private DotNetObjectReference<CreateSheet>? _objRef;
+    private ElementReference _dictateBtn;
+    private string _dictationLanguage = "en-US";
 
     private const int MaxApprovals = 20;
     private static readonly string[] AllowedExtensions = { ".pdf", ".doc", ".docx" };
@@ -393,6 +395,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        _objRef = DotNetObjectReference.Create(this);
         _approverEmails = await DbContext.Users
             .Where(u => u.Email != null)
             .Select(u => u.Email!)
@@ -1090,8 +1093,27 @@ else
         }
     }
 
+    private async Task HandleDictation()
+    {
+        if (_dictationLanguage == "ur-PK" && _objRef is not null)
+        {
+            await JS.InvokeVoidAsync("quillInterop.startIntelligentDictation", "editor", _dictateBtn, _objRef);
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("quillInterop.toggleDictation", "editor", _dictateBtn, _dictationLanguage);
+        }
+    }
+
+    [JSInvokable]
+    public async Task<string> TranslateUrduToEnglish(string urduText)
+    {
+        return await SummarizationService.TranslateUrduToEnglishAsync(urduText);
+    }
+
     public async ValueTask DisposeAsync()
     {
+        _objRef?.Dispose();
         // Drop the cached Quill instance so a later visit re-initialises cleanly.
         // Best-effort: during teardown/navigation JS interop may be unavailable
         // (JSDisconnectedException) or disallowed mid-render (InvalidOperationException).

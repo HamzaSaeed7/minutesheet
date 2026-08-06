@@ -336,6 +336,55 @@ public class DocumentSummarizationService
             return "{\"error\": \"Failed to generate agenda.\"}";
         }
     }
+
+    public async Task<string> TranslateUrduToEnglishAsync(string urduText)
+    {
+        var apiKey = _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"];
+        if (string.IsNullOrEmpty(apiKey))
+        {
+            return "Error: AI API Key is not configured.";
+        }
+
+        var url = "https://openrouter.ai/api/v1/chat/completions";
+
+        var payload = new
+        {
+            model = "openai/gpt-oss-20b:free",
+            messages = new[]
+            {
+                new { role = "system", content = "You are an expert translator. Translate the following Urdu text (which may be in Urdu script or Roman Urdu) into professional English. Respond ONLY with the English translation, and nothing else." },
+                new { role = "user", content = urduText }
+            }
+        };
+
+        var jsonPayload = JsonSerializer.Serialize(payload);
+        var content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
+
+        try
+        {
+            var request = new HttpRequestMessage(HttpMethod.Post, url);
+            request.Headers.Add("Authorization", $"Bearer {apiKey}");
+            request.Headers.Add("HTTP-Referer", "http://localhost:5285");
+            request.Headers.Add("X-Title", "Minute Sheet App");
+            request.Content = content;
+
+            var response = await _httpClient.SendAsync(request);
+            response.EnsureSuccessStatusCode();
+            
+            var responseJson = await response.Content.ReadAsStringAsync();
+            _logger.LogInformation("OpenRouter raw response (translation): {ResponseJson}", responseJson);
+            
+            using var doc = JsonDocument.Parse(responseJson);
+            var generatedText = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
+
+            return generatedText?.Trim() ?? string.Empty;
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to call AI API for translation");
+            return $"[Translation Error: {ex.Message}]";
+        }
+    }
     // Parses the model's JSON {"summary": "...", "actions": [...], "decisions": [...]} response,
     // falling back to treating the whole response as plain summary text.
     private static SummaryResult ParseSummaryResult(string? generatedText)
