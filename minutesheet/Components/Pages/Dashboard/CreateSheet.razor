@@ -51,6 +51,12 @@ else
         }
 
         <div class="content-card">
+            <div class="card-eyebrow" style="margin-bottom:10px;">Title</div>
+            <input type="text" class="form-control" maxlength="200" placeholder="Give this minute sheet a title"
+                   @bind="_title" @bind:event="oninput" />
+        </div>
+
+        <div class="content-card">
             <div class="card-eyebrow" style="margin-bottom:10px;">Category</div>
             <div class="seg-tabs">
                 <button type="button" class="seg-tab @(_category == SheetCategory.Financial ? "active" : "")" @onclick="() => _category = SheetCategory.Financial">Financial</button>
@@ -382,6 +388,7 @@ else
     private List<minutesheet.Services.AgendaItemDto> _agendaItems = new();
     private bool _generatingAgenda;
 
+    private string _title = "";
     private SheetCategory _category = SheetCategory.Financial;
     private bool _isConfidential;
     private readonly List<ApprovalRow> _rows = new() { new ApprovalRow { Action = ApprovalAction.Review } };
@@ -447,6 +454,7 @@ else
                 else
                 {
                     creatorId = sheet.CreatedByUserId;
+                    _title = sheet.Title;
                     _category = sheet.Category;
                     _isConfidential = sheet.IsConfidential;
                     _initialDescriptionHtml = sheet.DescriptionHtml;
@@ -558,6 +566,12 @@ else
         _saving = true;
         try
         {
+            if (string.IsNullOrWhiteSpace(_title))
+            {
+                ToastService.ShowError("Please enter a title.", "Missing title");
+                return;
+            }
+
             var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
 
             if (string.IsNullOrWhiteSpace(descriptionHtml))
@@ -631,6 +645,7 @@ else
                     sheet.AttachmentFileName = originalName;
                 }
 
+                sheet.Title = _title.Trim();
                 sheet.Category = _category;
                 sheet.IsConfidential = _isConfidential;
                 sheet.DescriptionHtml = descriptionHtml;
@@ -691,6 +706,7 @@ else
             {
                 var sheet = new MinuteSheet
                 {
+                    Title = _title.Trim(),
                     Category = _category,
                     IsConfidential = _isConfidential,
                     DescriptionHtml = descriptionHtml,
@@ -925,12 +941,24 @@ else
         try
         {
             var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
-            string plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
-            
-            var resultJson = await SummarizationService.GenerateAgendaAsync(plainText);
-            
-            var response = System.Text.Json.JsonSerializer.Deserialize<minutesheet.Services.AgendaResponseDto>(resultJson);
-            if (response?.AgendaItems != null)
+
+            var content = new SheetExporter.ExportContent(
+                Title: string.IsNullOrWhiteSpace(_title) ? $"Minute Sheet - {_category}" : _title.Trim(),
+                Category: _category.ToString(),
+                Confidentiality: _isConfidential ? "Confidential" : "Non-Confidential",
+                Date: DateTime.Now.ToString("dd MMM yyyy hh:mm tt"),
+                PreparedBy: _creator is null
+                    ? "-"
+                    : string.IsNullOrWhiteSpace(_creator.FullName)
+                        ? _creator.Email
+                        : $"{_creator.FullName} ({_creator.Email})",
+                Description: HtmlToPlainText(descriptionHtml),
+                Summary: _summary);
+
+            byte[] bytes;
+            string mime;
+            string ext;
+            switch (format)
             {
                 _agendaItems = response.AgendaItems;
             }
