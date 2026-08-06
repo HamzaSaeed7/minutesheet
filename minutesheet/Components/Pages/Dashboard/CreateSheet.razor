@@ -390,6 +390,7 @@ else
     private IBrowserFile? _selectedFile;
     private string? _error;
     private bool _saving;
+    private bool _downloading;
 
     private const int MaxApprovals = 20;
     private static readonly string[] AllowedExtensions = { ".pdf", ".doc", ".docx" };
@@ -941,6 +942,79 @@ else
         finally
         {
             _generatingAgenda = false;
+        }
+    }
+    private minutesheet.Services.SheetExporter.ExportContent CreateExportContent(string descriptionHtml)
+    {
+        var title = "Minute Sheet";
+        var catStr = _category.ToString();
+        var confStr = _isConfidential ? "Confidential" : "Standard";
+        var dateStr = DateTime.Now.ToString("dd MMM yyyy");
+        var preparedBy = _creator?.FullName ?? "Unknown";
+        
+        string plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
+        var summary = _summary ?? "";
+        
+        return new minutesheet.Services.SheetExporter.ExportContent(title, catStr, confStr, dateStr, preparedBy, plainText, summary);
+    }
+
+    private async Task DownloadDocxAsync()
+    {
+        _downloading = true;
+        try
+        {
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+            var content = CreateExportContent(descriptionHtml);
+            var bytes = SheetExporter.BuildDocx(content);
+            await JS.InvokeVoidAsync("downloadFileFromBytes", "Draft.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document", Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Export failed: {ex.Message}");
+        }
+        finally
+        {
+            _downloading = false;
+        }
+    }
+
+    private async Task DownloadDocAsync()
+    {
+        _downloading = true;
+        try
+        {
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+            var content = CreateExportContent(descriptionHtml);
+            var bytes = SheetExporter.BuildDoc(content);
+            await JS.InvokeVoidAsync("downloadFileFromBytes", "Draft.doc", "application/msword", Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Export failed: {ex.Message}");
+        }
+        finally
+        {
+            _downloading = false;
+        }
+    }
+
+    private async Task DownloadPdfAsync()
+    {
+        _downloading = true;
+        try
+        {
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+            var content = CreateExportContent(descriptionHtml);
+            var bytes = SheetExporter.BuildPdf(content);
+            await JS.InvokeVoidAsync("downloadFileFromBytes", "Draft.pdf", "application/pdf", Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Export failed: {ex.Message}");
+        }
+        finally
+        {
+            _downloading = false;
         }
     }
 
