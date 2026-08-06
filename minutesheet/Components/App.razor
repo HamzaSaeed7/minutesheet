@@ -9,7 +9,8 @@
     <base href="/" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
+    <noscript><link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" /></noscript>
     <link rel="stylesheet" href="bootstrap/bootstrap.min.css" />
     <link rel="stylesheet" href="lib/quill/quill.snow.css" />
     <link rel="stylesheet" href="@($"app.css?v={CssVersion("app.css")}")" />
@@ -18,7 +19,31 @@
     <HeadOutlet />
 </head>
 
-<body>
+<body data-theme="@_theme">
+    <script>
+            function applyMsTheme() {
+                try {
+                    var t = localStorage.getItem('ms-theme');
+                    if (t === 'dark' || t === 'light') {
+                        document.body.dataset.theme = t;
+                    }
+                } catch (e) { }
+            }
+
+            // Official Blazor API for reacting to enhanced-navigation page updates.
+            // Registered once blazor.web.js has loaded (window.Blazor exists); a
+            // fallback keeps the theme applied even if navigation isn't enhanced.
+            function registerEnhancedNav() {
+                if (window.Blazor && typeof Blazor.addEventListener === 'function') {
+                    Blazor.addEventListener('enhancedload', applyMsTheme);
+                } else {
+                    setTimeout(registerEnhancedNav, 100);
+                }
+            }
+
+            applyMsTheme();
+            registerEnhancedNav();
+    </script>
     <Routes />
     <script src="_framework/blazor.web.js"></script>
     <script src="https://unpkg.com/compromise"></script>
@@ -29,6 +54,23 @@
 </html>
 
 @code {
+    // Server-rendered theme: the <body> tag is emitted with data-theme from the
+    // ms-theme cookie, so every page (including enhanced-navigation fetches and
+    // hard reloads) arrives already dark without relying on client-side events.
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string _theme = "";
+
+    protected override void OnInitialized()
+    {
+        var cookie = HttpContext?.Request.Cookies["ms-theme"];
+        if (cookie is "dark" or "light")
+        {
+            _theme = cookie;
+        }
+    }
+
     // Cache-bust CSS by the file's last-modified time so edits always reach the
     // browser without a manual hard refresh. Static-file middleware sends no
     // Cache-Control in dev, so the browser otherwise serves stale copies.
@@ -37,10 +79,6 @@
         try
         {
             var full = Path.Combine(Env.WebRootPath, relativePath);
-            // Static files (e.g. app.css) live in wwwroot and can change without a
-            // rebuild — key off their own mtime. Compiled bundles (scoped CSS) are
-            // served virtually, so fall back to the assembly build time, which
-            // changes on every rebuild.
             var when = File.Exists(full)
                 ? File.GetLastWriteTimeUtc(full)
                 : File.GetLastWriteTimeUtc(System.Reflection.Assembly.GetExecutingAssembly().Location);
