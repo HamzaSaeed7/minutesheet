@@ -22,7 +22,7 @@ namespace minutesheet.Services
         public byte[] Build(MinuteSheet sheet, string creatorName)
         {
             var status = sheet.Status ?? ApprovalWorkflow.StatusFor(sheet);
-            var (actions, decisions) = ParseActionsDecisions(sheet.ActionsDecisions);
+            var actionItems = ParseActionItems(sheet.ActionItems);
             var logoBytes = LogoBytes();
 
             var doc = Document.Create(container =>
@@ -66,24 +66,15 @@ namespace minutesheet.Services
                         col.Item().PaddingBottom(2).Text($"Prepared by:  {creatorName}");
                         col.Item().PaddingBottom(8).Text($"Status:  {status}");
 
-                        if (actions.Count > 0 || decisions.Count > 0)
+                        if (actionItems.Count > 0)
                         {
-                            col.Item().PaddingTop(4).Text("Actions & Decisions").FontSize(14).Bold().FontColor("#000066");
-                            if (actions.Count > 0)
+                            col.Item().PaddingTop(4).Text("Action Items").FontSize(14).Bold().FontColor("#000066");
+                            foreach (var item in actionItems)
                             {
-                                col.Item().PaddingTop(4).Text("ACTIONS").FontSize(11).Bold().FontColor("#d33636");
-                                foreach (var item in actions)
-                                {
-                                    col.Item().PaddingLeft(6).Text($"•  {item}");
-                                }
-                            }
-                            if (decisions.Count > 0)
-                            {
-                                col.Item().PaddingTop(6).Text("DECISIONS").FontSize(11).Bold().FontColor("#1a8a5a");
-                                foreach (var item in decisions)
-                                {
-                                    col.Item().PaddingLeft(6).Text($"•  {item}");
-                                }
+                                var meta = new List<string>();
+                                if (!string.IsNullOrWhiteSpace(item.Owner)) meta.Add($"Owner: {item.Owner}");
+                                if (!string.IsNullOrWhiteSpace(item.Deadline)) meta.Add($"Deadline: {item.Deadline}");
+                                col.Item().PaddingLeft(6).Text($"•  {item.Task}" + (meta.Count > 0 ? $"  ({string.Join(" · ", meta)})" : ""));
                             }
                         }
 
@@ -128,39 +119,26 @@ namespace minutesheet.Services
             return File.Exists(path) ? File.ReadAllBytes(path) : Array.Empty<byte>();
         }
 
-        private static (List<string> Actions, List<string> Decisions) ParseActionsDecisions(string? json)
+        private static List<ActionItemDto> ParseActionItems(string? json)
         {
-            var actions = new List<string>();
-            var decisions = new List<string>();
-            if (!string.IsNullOrWhiteSpace(json))
+            var items = new List<ActionItemDto>();
+            if (string.IsNullOrWhiteSpace(json))
             {
-                try
+                return items;
+            }
+            try
+            {
+                var list = System.Text.Json.JsonSerializer.Deserialize<List<ActionItemDto>>(json);
+                if (list is not null)
                 {
-                    using var doc = System.Text.Json.JsonDocument.Parse(json);
-                    var root = doc.RootElement;
-                    if (root.TryGetProperty("actions", out var a) && a.ValueKind == System.Text.Json.JsonValueKind.Array)
-                    {
-                        foreach (var item in a.EnumerateArray())
-                        {
-                            var text = item.GetString()?.Trim();
-                            if (!string.IsNullOrWhiteSpace(text)) actions.Add(text);
-                        }
-                    }
-                    if (root.TryGetProperty("decisions", out var d) && d.ValueKind == System.Text.Json.JsonValueKind.Array)
-                    {
-                        foreach (var item in d.EnumerateArray())
-                        {
-                            var text = item.GetString()?.Trim();
-                            if (!string.IsNullOrWhiteSpace(text)) decisions.Add(text);
-                        }
-                    }
-                }
-                catch
-                {
-                    // Ignore malformed JSON.
+                    items.AddRange(list.Where(i => !string.IsNullOrWhiteSpace(i.Task)));
                 }
             }
-            return (actions, decisions);
+            catch
+            {
+                // Ignore malformed JSON.
+            }
+            return items;
         }
 
         private static string ToPlainText(string htmlOrText)

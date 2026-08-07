@@ -451,5 +451,3 @@ public class AgendaResponseDto
     [System.Text.Json.Serialization.JsonPropertyName("agenda_items")]
     public List<AgendaItemDto> AgendaItems { get; set; } = new();
 }
-
-public sealed record SummaryResult(string Summary, List<string> Actions, List<string> Decisions);

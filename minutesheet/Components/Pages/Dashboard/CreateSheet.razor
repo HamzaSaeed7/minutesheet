@@ -989,28 +989,6 @@ else
         if (_dictationLanguage == "ur-PK" && _objRef is not null)
         {
             await JS.InvokeVoidAsync("quillInterop.startIntelligentDictation", "editor", _dictateBtn, _objRef);
-            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
-
-            var content = new SheetExporter.ExportContent(
-                Title: string.IsNullOrWhiteSpace(_title) ? $"Minute Sheet - {_category}" : _title.Trim(),
-                Category: _category.ToString(),
-                Confidentiality: _isConfidential ? "Confidential" : "Non-Confidential",
-                Date: DateTime.Now.ToString("dd MMM yyyy hh:mm tt"),
-                PreparedBy: _creator is null
-                    ? "-"
-                    : string.IsNullOrWhiteSpace(_creator.FullName)
-                        ? _creator.Email
-                        : $"{_creator.FullName} ({_creator.Email})",
-                Description: HtmlToPlainText(descriptionHtml),
-                Summary: _summary);
-
-            byte[] bytes;
-            string mime;
-            string ext;
-            switch (format)
-            {
-                _agendaItems = response.AgendaItems;
-            }
         }
         else
         {
@@ -1022,64 +1000,6 @@ else
     public async Task<string> TranslateUrduToEnglish(string urduText)
     {
         return await SummarizationService.TranslateUrduToEnglishAsync(urduText);
-    }
-
-    private bool _downloading;
-
-    private async Task<SheetExporter.ExportContent> BuildExportContentAsync()
-    {
-        var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
-        var plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
-
-        var preparedBy = _creator is not null && !string.IsNullOrWhiteSpace(_creator.FullName)
-            ? _creator.FullName
-            : _creator?.Email ?? "";
-
-        return new SheetExporter.ExportContent(
-            Title: "Minute Sheet",
-            Category: _category.ToString(),
-            Confidentiality: _isConfidential ? "Confidential" : "Non-Confidential",
-            Date: DateTime.Now.ToString("dd MMM yyyy"),
-            PreparedBy: preparedBy,
-            Description: plainText,
-            Summary: _summary ?? "");
-    }
-
-    private async Task DownloadDocxAsync()
-    {
-        await DownloadAsync("minute-sheet.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            c => SheetExporter.BuildDocx(c));
-    }
-
-    private async Task DownloadDocAsync()
-    {
-        await DownloadAsync("minute-sheet.doc", "application/msword",
-            c => SheetExporter.BuildDoc(c));
-    }
-
-    private async Task DownloadPdfAsync()
-    {
-        await DownloadAsync("minute-sheet.pdf", "application/pdf",
-            c => SheetExporter.BuildPdf(c));
-    }
-
-    private async Task DownloadAsync(string fileName, string mimeType, Func<SheetExporter.ExportContent, byte[]> build)
-    {
-        _downloading = true;
-        try
-        {
-            var content = await BuildExportContentAsync();
-            var bytes = build(content);
-            await JS.InvokeVoidAsync("quillInterop.downloadFile", fileName, mimeType, Convert.ToBase64String(bytes));
-        }
-        catch (Exception ex)
-        {
-            ToastService.ShowError($"Could not download: {ex.Message}", "Error");
-        }
-        finally
-        {
-            _downloading = false;
-        }
     }
 
     public async ValueTask DisposeAsync()
