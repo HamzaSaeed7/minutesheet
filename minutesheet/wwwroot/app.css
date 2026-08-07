@@ -949,6 +949,447 @@ button.ql-dictateEn.listening, button.ql-dictateUr.listening {
 @media (prefers-reduced-motion: reduce) {
     .ms-toast { animation: none; }
 }
+/* ============================================================
+   DARK THEME  (enabled by <body data-theme="dark">)
+   Append at the very end of app.css
+   ============================================================ */
+
+body[data-theme="dark"] {
+    /* Re-map every variable so all var(--x) references flip to dark */
+    --brand: #5f6df0;
+    --brand-dark: #4654d6;
+    --brand-tint: #232850;
+    --bg: #0f1120;
+    --card: #181b30;
+    --ink: #e6e8f5;
+    --ink-strong: #ffffff;
+    --muted: #9aa0bd;
+    --muted-2: #737a99;
+    --border: #2a2f4a;
+    --divider: #232840;
+    --sidebar: #0b0d1c;
+    --ok-bg: #14302a;
+    --ok: #3dd994;
+    --review-bg: #16233f;
+    --review: #6f8dff;
+    --wait-bg: #30260e;
+    --wait: #f0a83a;
+    --danger: #ff6b6b;
+    --danger-bg: #3a1d1d;
+    --danger-border: #55282a;
+}
+
+    /* ---------- Smooth theme switch (applied to body only to avoid a
+       transition storm across hundreds of elements that pegs the CPU) ---------- */
+    body[data-theme="dark"] {
+        transition: background-color .18s ease, color .18s ease;
+    }
+
+        /* ---------- Search highlight ---------- */
+        body[data-theme="dark"] ::selection {
+            background: rgba(95,109,240,.35);
+        }
+
+        /* ---------- Scrollbar ---------- */
+        body[data-theme="dark"]::-webkit-scrollbar {
+            width: 12px;
+        }
+
+        body[data-theme="dark"]::-webkit-scrollbar-track {
+            background: #0f1120;
+        }
+
+        body[data-theme="dark"]::-webkit-scrollbar-thumb {
+            background: #2c3150;
+            border-radius: 6px;
+            border: 3px solid #0f1120;
+        }
+
+            body[data-theme="dark"]::-webkit-scrollbar-thumb:hover {
+                background: #3a4066;
+            }
+
+        /* ---------- Buttons (hardcoded whites) ---------- */
+        body[data-theme="dark"] .btn-outline-secondary {
+            background: var(--card);
+            color: var(--muted);
+        }
+
+        body[data-theme="dark"] .btn-cancel {
+            background: var(--card);
+            color: var(--muted);
+        }
+
+            body[data-theme="dark"] .btn-cancel:hover {
+                background: var(--bg);
+                color: var(--muted);
+            }
+
+        body[data-theme="dark"] .btn-ghost {
+            background: var(--card);
+            color: var(--muted);
+            border-color: var(--border);
+        }
+
+            body[data-theme="dark"] .btn-ghost:hover {
+                border-color: var(--brand);
+                color: var(--brand);
+            }
+
+        body[data-theme="dark"] .btn-del {
+            background: var(--card);
+            color: var(--danger);
+            border-color: var(--danger-border);
+        }
+
+            body[data-theme="dark"] .btn-del:hover:not(:disabled) {
+                background: var(--danger-bg);
+            }
+
+        /* ---------- Forms / inputs ---------- */
+        body[data-theme="dark"] .form-control,
+        body[data-theme="dark"] .form-select {
+            background: var(--card);
+            color: var(--ink);
+        }
+
+            body[data-theme="dark"] .form-control:focus,
+            body[data-theme="dark"] .form-select:focus {
+                background: var(--card);
+            }
+
+            body[data-theme="dark"] .form-control::placeholder {
+                color: var(--muted-2);
+            }
+
+        body[data-theme="dark"] .form-label {
+            color: var(--muted);
+        }
+
+        body[data-theme="dark"] .field-label {
+            color: var(--muted);
+        }
+
+        body[data-theme="dark"] .form-control:disabled {
+            color: var(--muted-2);
+            background: var(--bg);
+        }
+
+        /* ---------- Tables ---------- */
+        body[data-theme="dark"] .table thead th {
+            background: var(--bg);
+            color: var(--muted-2);
+        }
+
+        body[data-theme="dark"] .table td {
+            color: var(--ink);
+        }
+
+        body[data-theme="dark"] .table-hover > tbody > tr:hover > * {
+            background-color: #1b1f38;
+        }
+
+        /* ---------- Cards / surfaces already use var(--card) ---------- */
+        body[data-theme="dark"] .content-card,
+        body[data-theme="dark"] .stat-card,
+        body[data-theme="dark"] .chart-card,
+        body[data-theme="dark"] .qa-card,
+        body[data-theme="dark"] .activity-card,
+        body[data-theme="dark"] .prepared-card {
+            background: var(--card);
+        }
+
+            body[data-theme="dark"] .qa-card.qa-dark {
+                background: #0b0d1c;
+                border-color: #0b0d1c;
+            }
+
+                body[data-theme="dark"] .qa-card.qa-dark .qa-desc {
+                    color: #8b90b5;
+                }
+
+        body[data-theme="dark"] .stat-label {
+            color: var(--muted);
+        }
+
+        body[data-theme="dark"] .stat-value {
+            color: var(--ink-strong);
+        }
+
+        body[data-theme="dark"] .stat-sub {
+            color: var(--muted-2);
+        }
+
+        body[data-theme="dark"] .activity-row:hover {
+            background: #1b1f38;
+        }
+
+        body[data-theme="dark"] .activity-title {
+            color: var(--ink);
+        }
+
+        /* ---------- Charts ---------- */
+        body[data-theme="dark"] .bar-val {
+            color: var(--ink);
+        }
+
+        body[data-theme="dark"] .bar-lbl {
+            color: var(--muted-2);
+        }
+
+        body[data-theme="dark"] .donut-cap {
+            fill: var(--muted-2);
+        }
+
+        body[data-theme="dark"] .donut-num {
+            fill: var(--ink-strong);
+        }
+
+        /* ---------- Dashboard trend / sparkline (SVG fill color maintenance) ---------- */
+        body[data-theme="dark"] .spark-area {
+            fill: rgba(95,109,240,.18);
+        }
+
+        body[data-theme="dark"] .spark-line {
+            stroke: var(--brand);
+        }
+
+        body[data-theme="dark"] .chart-grid path {
+            stroke: var(--brand);
+        }
+
+        /* ---------- History ---------- */
+        body[data-theme="dark"] .filter-pill {
+            background: var(--card);
+            color: var(--muted);
+            box-shadow: inset 0 0 0 1px var(--border);
+        }
+
+            body[data-theme="dark"] .filter-pill.active {
+                background: var(--sidebar);
+                color: #fff;
+            }
+
+        body[data-theme="dark"] .progress-mini,
+        body[data-theme="dark"] .h-progress-bar {
+            background: #262b45;
+        }
+
+        body[data-theme="dark"] .ht-search input {
+            background: var(--card);
+            color: var(--ink);
+        }
+
+        body[data-theme="dark"] .ht-select {
+            background-color: var(--card);
+            color: var(--ink);
+        }
+
+        body[data-theme="dark"] .ht-clear {
+            background: var(--card);
+            color: var(--muted);
+        }
+
+        body[data-theme="dark"] .history-toolbar {
+            background: var(--bg);
+        }
+
+        body[data-theme="dark"] .history-row:hover {
+            background: #1b1f38;
+        }
+
+        body[data-theme="dark"] .history-cat {
+            color: var(--ink-strong);
+        }
+
+        body[data-theme="dark"] .history-date {
+            background: var(--brand-tint);
+            border-color: var(--border);
+        }
+
+        body[data-theme="dark"] .history-pagination {
+            background: var(--bg);
+        }
+
+        body[data-theme="dark"] .pgn-btn,
+        body[data-theme="dark"] .pgn-num {
+            background: var(--card);
+            color: var(--muted);
+        }
+
+            body[data-theme="dark"] .pgn-num.active {
+                background: var(--sidebar);
+                color: #fff;
+            }
+
+        body[data-theme="dark"] .h-progress-count {
+            color: var(--muted);
+        }
+
+        /* ---------- Actions ---------- */
+        body[data-theme="dark"] .act-head {
+            background: var(--bg);
+        }
+
+        body[data-theme="dark"] .act-card {
+            background: var(--card);
+        }
+
+        body[data-theme="dark"] .act-row {
+            color: var(--ink);
+        }
+
+        body[data-theme="dark"] .act-empty {
+            color: var(--muted-2);
+        }
+
+        /* ---------- avatars / creator / description ---------- */
+        body[data-theme="dark"] .avatar-preview {
+            background: var(--brand-tint);
+        }
+
+        body[data-theme="dark"] .avatar-initials,
+        body[data-theme="dark"] .sheet-avatar,
+        body[data-theme="dark"] .comment-avatar,
+        body[data-theme="dark"] .prepared-avatar {
+            color: var(--brand);
+            background: var(--brand-tint);
+        }
+
+        body[data-theme="dark"] .creator-panel {
+            background: var(--bg);
+        }
+
+        body[data-theme="dark"] .creator-name {
+            color: var(--ink);
+        }
+
+        body[data-theme="dark"] .creator-meta {
+            color: var(--muted);
+        }
+
+        body[data-theme="dark"] .description-body {
+            background: var(--bg);
+            color: var(--ink);
+            border-color: var(--border);
+        }
+
+        body[data-theme="dark"] .comment-bubble {
+            background: var(--bg);
+        }
+
+        body[data-theme="dark"] .comment-body {
+            color: var(--ink);
+        }
+
+        /* ---------- Sheet view ---------- */
+        body[data-theme="dark"] .tl-dot {
+            background: var(--divider);
+            color: var(--muted-2);
+        }
+
+        body[data-theme="dark"] .tl-line {
+            background: #262b45;
+        }
+
+        body[data-theme="dark"] .tl-approver {
+            color: var(--ink);
+        }
+
+        body[data-theme="dark"] .expected-chip {
+            background: var(--divider);
+            color: var(--muted);
+        }
+
+        body[data-theme="dark"] .action-zone {
+            background: var(--bg);
+        }
+
+        body[data-theme="dark"] .action-zone--review {
+            background: #261c09;
+            border-color: #5a4711;
+        }
+
+        /* ---------- Create ---------- */
+        body[data-theme="dark"] .dropzone {
+            border-color: #333a5c;
+            color: var(--muted-2);
+        }
+
+        body[data-theme="dark"] .seg-tabs {
+            background: var(--bg);
+        }
+
+        body[data-theme="dark"] .seg-tab {
+            color: var(--muted);
+        }
+
+            body[data-theme="dark"] .seg-tab.active {
+                background: var(--card);
+                color: var(--brand);
+            }
+
+        body[data-theme="dark"] .info-note {
+            background: var(--brand-tint);
+            color: var(--brand);
+        }
+
+        /* ---------- Settings ---------- */
+        body[data-theme="dark"] .setup-key,
+        body[data-theme="dark"] .recovery-grid code {
+            background: var(--bg);
+            color: var(--ink-strong);
+        }
+
+        body[data-theme="dark"] .qr-img {
+            background: var(--card);
+        }
+
+        body[data-theme="dark"] .settings-card .form-control:disabled {
+            background: var(--bg);
+            color: var(--muted-2);
+        }
+
+        /* ---------- Toasts ---------- */
+        body[data-theme="dark"] .ms-toast {
+            background: var(--card);
+            border-color: var(--border);
+            box-shadow: 0 10px 30px rgba(0,0,0,.5);
+        }
+
+        body[data-theme="dark"] .ms-toast-title {
+            color: var(--ink-strong);
+        }
+
+        body[data-theme="dark"] .ms-toast-msg {
+            color: var(--muted);
+        }
+
+        body[data-theme="dark"] .ms-toast-close {
+            color: var(--muted-2);
+        }
+
+            body[data-theme="dark"] .ms-toast-close:hover {
+                color: var(--ink);
+                background: var(--divider);
+            }
+
+        body[data-theme="dark"] .ms-toast-inline {
+            background: var(--card);
+            border-color: var(--border);
+        }
+
+        /* ---------- Voice toolbar (keep legible on dark) ---------- */
+        body[data-theme="dark"] .ql-toolbar button.ql-dictateEn,
+        body[data-theme="dark"] .ql-toolbar button.ql-dictateUr {
+            color: var(--ink) !important;
+        }
+
+            body[data-theme="dark"] .ql-toolbar button.ql-dictateEn:hover,
+            body[data-theme="dark"] .ql-toolbar button.ql-dictateUr:hover {
+                background-color: var(--divider);
+                border-color: var(--brand);
+            }
 
 /* =====================================================================
    Responsive layout — pure UI overrides.

@@ -9,99 +9,140 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject UserManager<ApplicationUser> UserManager
 @inject IConfiguration Configuration
+@inject IJSRuntime JS
+<style>
+    /* ---------- Sidebar collapse / expand ---------- */
+    .sb-fold {
+        width: 26px;
+        height: 26px;
+        border-radius: 50%;
+        flex-shrink: 0;
+        margin-left: auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid rgba(255, 255, 255, .35);
+        background: rgba(255, 255, 255, .08);
+        color: #fff;
+        cursor: pointer;
+        transition: background .2s ease, transform .2s ease;
+    }
 
-<div class="sb">
-    <div class="sb-brand">
-        <div class="sb-logo" title="FFC — Partner in Prosperity">
-            <img src="images/FFC-Logo-Blue-V3.webp" alt="FFC" />
+        .sb-fold:hover {
+            background: rgba(255, 255, 255, .18);
+            transform: rotate(-12deg);
+        }
+
+    .page > .sidebar {
+        transition: width .25s ease;
+    }
+
+    body.sb-collapsed .page > .sidebar {
+        width: 72px !important;
+    }
+
+    body.sb-collapsed .sidebar .sb-brand {
+        justify-content: center;
+        gap: 0 !important;
+    }
+
+    body.sb-collapsed .sidebar .sb-title,
+    body.sb-collapsed .sidebar .sb-nav,
+    body.sb-collapsed .sidebar .sb-bottom,
+    body.sb-collapsed .sidebar .navbar-toggler {
+        display: none !important;
+    }
+</style>
+
+<div class="sb @(_collapsed ? "sb-collapsed" : "")">
+    <div class="sb-brand" title="@(_collapsed ? "Expand sidebar" : "")"
+         style="white-space:nowrap; min-width:0; gap:8px;" @onclick="ExpandSidebar">
+        <div class="sb-logo" title="FFC — Partner in Prosperity" style="flex-shrink:0;">
+            <img src="images/FFC-Logo-Blue-V3.webp" alt="FFC" style="height:26px; width:auto;" />
         </div>
-        <div class="sb-title">Minute Sheet</div>
+        <div class="sb-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;">Minute Sheet</div>
+        @if (!_collapsed)
+        {
+            <button type="button" class="sb-fold" title="Collapse sidebar"
+                    @onclick="CollapseSidebar" @onclick:stopPropagation="true">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"></path></svg>
+            </button>
+        }
     </div>
 
-    <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
+    @if (!_collapsed)
+    {
+        <input type="checkbox" title="Navigation menu" class="navbar-toggler" />
 
-    <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
-        <nav class="sb-nav">
-            <NavLink class="sb-link" href="" Match="NavLinkMatch.All">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1.5"></rect><rect x="13" y="3" width="8" height="8" rx="1.5"></rect><rect x="3" y="13" width="8" height="8" rx="1.5"></rect><rect x="13" y="13" width="8" height="8" rx="1.5"></rect></svg>
-                <span>Dashboard</span>
-            </NavLink>
-            <NavLink class="sb-link" href="dashboard/create">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"></rect><path d="M12 8v8M8 12h8"></path></svg>
-                <span>Create New Sheet</span>
-            </NavLink>
-            <NavLink class="sb-link" href="dashboard/history">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg>
-                <span>History</span>
-            </NavLink>
-            <NavLink class="sb-link" href="dashboard/actions">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"></path><circle cx="12" cy="12" r="9"></circle></svg>
-                <span>Actions</span>
-                @if (_pendingCount > 0)
-                {
-                    <span class="sb-badge">@_pendingCount</span>
-                }
-            </NavLink>
-
-            <AuthorizeView Roles="@Roles.Admin">
-                <div class="sb-section-label">Admin</div>
-                <NavLink class="sb-link" href="admin/users">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
-                    <span>Manage Users</span>
+        <div class="nav-scrollable" onclick="document.querySelector('.navbar-toggler').click()">
+            <nav class="sb-nav">
+                <NavLink class="sb-link" href="" Match="NavLinkMatch.All">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="8" height="8" rx="1.5"></rect><rect x="13" y="3" width="8" height="8" rx="1.5"></rect><rect x="3" y="13" width="8" height="8" rx="1.5"></rect><rect x="13" y="13" width="8" height="8" rx="1.5"></rect></svg>
+                    <span>Dashboard</span>
                 </NavLink>
-                <NavLink class="sb-link" href="admin/departments">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 21h18M6 21V7l6-4 6 4v14"></path><path d="M10 12h4M10 16h4"></path></svg>
-                    <span>Departments</span>
+                <NavLink class="sb-link" href="dashboard/create">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="3"></rect><path d="M12 8v8M8 12h8"></path></svg>
+                    <span>Create New Sheet</span>
                 </NavLink>
-                <NavLink class="sb-link" href="admin/sheets">
-                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path><path d="M14 2v6h6M8 13h8M8 17h8"></path></svg>
-                    <span>All Sheets</span>
+                <NavLink class="sb-link" href="dashboard/history">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3.5 2"></path></svg>
+                    <span>History</span>
                 </NavLink>
-            </AuthorizeView>
-        </nav>
+                <NavLink class="sb-link" href="dashboard/actions">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 12l2 2 4-4"></path><circle cx="12" cy="12" r="9"></circle></svg>
+                    <span>Actions</span>
+                    @if (_pendingCount > 0)
+                    {
+                        <span class="sb-badge">@_pendingCount</span>
+                    }
+                </NavLink>
 
-        <div class="sb-bottom">
-            <NavLink class="sb-link" href="settings">
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.63 15a1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.63a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1.04H21a2 2 0 0 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15z"></path></svg>
-                <span>Settings</span>
-            </NavLink>
+              
+            </nav>
 
-            <AuthorizeView>
-                <Authorized>
-                    <div class="sb-user">
-                        <div class="sb-avatar">
-                            @if (!string.IsNullOrEmpty(_avatarPath))
-                            {
-                                <img src="/@_avatarPath" alt="Profile" />
-                            }
-                            else
-                            {
-                                @_initials
-                            }
+            <div class="sb-bottom">
+                <NavLink class="sb-link" href="settings">
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"></circle><path d="M19.4 15a1.7 1.7 0 0 0 .34 1.87l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.7 1.7 0 0 0-1.87-.34 1.7 1.7 0 0 0-1.04 1.56V21a2 2 0 0 1-4 0v-.09A1.7 1.7 0 0 0 9 19.37a1.7 1.7 0 0 0-1.87.34l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.7 1.7 0 0 0 4.63 15a1.7 1.7 0 0 0-1.56-1.04H3a2 2 0 0 1 0-4h.09A1.7 1.7 0 0 0 4.63 9a1.7 1.7 0 0 0-.34-1.87l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.7 1.7 0 0 0 9 4.63a1.7 1.7 0 0 0 1.04-1.56V3a2 2 0 0 1 4 0v.09a1.7 1.7 0 0 0 1.04 1.56 1.7 1.7 0 0 0 1.87-.34l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.7 1.7 0 0 0-.34 1.87V9a1.7 1.7 0 0 0 1.56 1.04H21a2 2 0 0 1 0 4h-.09A1.7 1.7 0 0 0 19.4 15z"></path></svg>
+                    <span>Settings</span>
+                </NavLink>
+
+                <AuthorizeView>
+                    <Authorized>
+                        <div class="sb-user">
+                            <div class="sb-avatar">
+                                @if (!string.IsNullOrEmpty(_avatarPath))
+                                {
+                                    <img src="/@_avatarPath" alt="Profile" />
+                                }
+                                else
+                                {
+                                    @_initials
+                                }
+                            </div>
+                            <div class="sb-user-info">
+                                <div class="sb-user-name">@_name</div>
+                                <div class="sb-user-desig">@_designation</div>
+                            </div>
                         </div>
-                        <div class="sb-user-info">
-                            <div class="sb-user-name">@_name</div>
-                            <div class="sb-user-desig">@_designation</div>
-                        </div>
-                    </div>
-                    <form action="Account/Logout" method="post" class="sb-logout-form">
-                        <AntiforgeryToken />
-                        <input type="hidden" name="ReturnUrl" value="@currentUrl" />
-                        <button type="submit" class="sb-logout">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>
-                            <span>Logout</span>
-                        </button>
-                    </form>
-                </Authorized>
-                <NotAuthorized>
-                    <NavLink class="sb-link" href="Account/Login">
-                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"></path></svg>
-                        <span>Login</span>
-                    </NavLink>
-                </NotAuthorized>
-            </AuthorizeView>
+                        <form action="Account/Logout" method="post" class="sb-logout-form">
+                            <AntiforgeryToken />
+                            <input type="hidden" name="ReturnUrl" value="@currentUrl" />
+                            <button type="submit" class="sb-logout">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"></path></svg>
+                                <span>Logout</span>
+                            </button>
+                        </form>
+                    </Authorized>
+                    <NotAuthorized>
+                        <NavLink class="sb-link" href="Account/Login">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"></path></svg>
+                            <span>Login</span>
+                        </NavLink>
+                    </NotAuthorized>
+                </AuthorizeView>
+            </div>
         </div>
-    </div>
+    }
 </div>
 
 @code {
@@ -111,15 +152,13 @@
     private string _initials = "?";
     private string? _avatarPath;
     private int _pendingCount;
+    private bool _collapsed;
 
     protected override async Task OnInitializedAsync()
     {
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         NavigationManager.LocationChanged += OnLocationChanged;
 
-        // GetUserId only reads the claim (no DB). Use a private context for the
-        // queries so we never share the request-scoped DbContext with the page,
-        // which would trigger EF's "second operation on this context" error.
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var userId = UserManager.GetUserId(authState.User);
         if (userId is null)
@@ -141,7 +180,6 @@
             _initials = Initials(user.FullName, user.Email);
 
             var email = user.Email ?? "";
-            // Hierarchical workflow: only count steps whose turn has actually come up.
             var mySteps = await db.ApprovalSteps
                 .Where(s => s.ApproverEmail == email && s.Status != ApprovalStepStatus.Approved)
                 .Include(s => s.MinuteSheet!).ThenInclude(m => m.ApprovalSteps)
@@ -157,6 +195,18 @@
     }
 
     public void Dispose() => NavigationManager.LocationChanged -= OnLocationChanged;
+
+    private async Task CollapseSidebar()
+    {
+        _collapsed = true;
+        await JS.InvokeVoidAsync("eval", "document.body.classList.add('sb-collapsed')");
+    }
+
+    private async Task ExpandSidebar()
+    {
+        _collapsed = false;
+        await JS.InvokeVoidAsync("eval", "document.body.classList.remove('sb-collapsed')");
+    }
 
     private static string DesignationName(Designation d)
     {

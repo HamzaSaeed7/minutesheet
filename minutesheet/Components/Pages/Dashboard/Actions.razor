@@ -15,6 +15,29 @@
 
 <PageTitle>Actions</PageTitle>
 
+<style>
+    .act-user {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        font-weight: 600;
+        color: #565b78;
+    }
+
+    .min-avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        color: #fff;
+        font-weight: 700;
+        font-size: 11.5px;
+        flex-shrink: 0;
+    }
+</style>
+
 <h1 class="page-title">Actions</h1>
 
 <ToastHost />
@@ -42,7 +65,12 @@ else
                 <div class="act-row" style="grid-template-columns:1.5fr 1.3fr 1.3fr 1fr 1fr 90px;">
                     <div style="font-weight:600;color:var(--ink-strong);">@sheet.Title</div>
                     <div>@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
-                    <div style="color:#565b78;">@CreatorName(sheet)</div>
+                    <div>
+                        <div class="act-user">
+                            <span class="min-avatar" style="background:@AvatarColor(sheet)">@AvatarInitials(sheet)</span>
+                            <span>@CreatorName(sheet)</span>
+                        </div>
+                    </div>
                     <div style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
                     <div><span class="badge @StepStatusClass(step.Status)">@DisplayName(step.Status)</span></div>
                     <div><a class="btn btn-sm btn-primary" href="dashboard/sheet/@sheet.Token">Open</a></div>
@@ -127,8 +155,6 @@ else
             .OrderByDescending(s => s.MinuteSheet!.CreatedAt)
             .ToListAsync();
 
-        // Hierarchical workflow: a step only reaches its approver once every earlier
-        // step has been approved.
         _pending = mySteps
             .Where(s => ApprovalWorkflow.IsActionable(s, s.MinuteSheet!.ApprovalSteps))
             .ToList();
@@ -159,6 +185,32 @@ else
         sheet.CreatedByUser is null
             ? "—"
             : (string.IsNullOrWhiteSpace(sheet.CreatedByUser.FullName) ? sheet.CreatedByUser.Email ?? "—" : sheet.CreatedByUser.FullName);
+
+    private static string AvatarInitials(MinuteSheet sheet)
+    {
+        if (sheet.CreatedByUser is null) return "?";
+        var source = string.IsNullOrWhiteSpace(sheet.CreatedByUser.FullName)
+            ? sheet.CreatedByUser.Email ?? "?"
+            : sheet.CreatedByUser.FullName;
+        var parts = source.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 0) return "?";
+        if (parts.Length == 1)
+        {
+            var w = parts[0];
+            return (w.Length >= 2 ? w[..2] : w).ToUpperInvariant();
+        }
+        return (parts[0][..1] + parts[^1][..1]).ToUpperInvariant();
+    }
+
+    private static string AvatarColor(MinuteSheet sheet)
+    {
+        var source = sheet.CreatedByUser is null ? "?" : (sheet.CreatedByUser.FullName ?? sheet.CreatedByUser.Email ?? "?");
+        var h = Math.Abs(source.GetHashCode());
+        var r = 60 + h % 140;
+        var g = 60 + (h >> 8) % 140;
+        var b = 60 + (h >> 16) % 140;
+        return $"rgb({r},{g},{b})";
+    }
 
     private static string DisplayName(ApprovalStepStatus s) => s switch
     {
