@@ -268,6 +268,10 @@ window.quillInterop = (function () {
             delete editors[elementId];
         },
 
+        getElementText: function (element) {
+            return element ? (element.innerText || element.textContent || "").trim() : "";
+        },
+
         downloadFile: function (fileName, mimeType, base64) {
             const bytes = Uint8Array.from(atob(base64), (c) => c.charCodeAt(0));
             const blob = new Blob([bytes], { type: mimeType });
