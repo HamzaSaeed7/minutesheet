@@ -61,9 +61,9 @@ Brand: `#000066` · Poppins.
 
 ### Prerequisites
 
-- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (the repo targets `net8.0`)
-- SQL Server **LocalDB** (ships with Visual Studio; or install the [SqlLocalDB](https://learn.microsoft.com/sql/database-engine/configure-windows/sql-server-express-localdb) tools)
-- Optional: [`dotnet-ef`](https://learn.microsoft.com/ef/core/cli/dotnet) for running migrations from the CLI — `dotnet tool install --global dotnet-ef`
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (targets `net8.0`)
+- SQL Server **LocalDB** (included with Visual Studio or via [SqlLocalDB](https://learn.microsoft.com/sql/database-engine/configure-windows/sql-server-express-localdb))
+- Optional: [`dotnet-ef`](https://learn.microsoft.com/ef/core/cli/dotnet) for CLI migrations (`dotnet tool install --global dotnet-ef`)
 
 ### 1. Clone
 
