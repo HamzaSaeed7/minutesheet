@@ -177,35 +177,38 @@
     </div>
 </div>
 
-<div class="content-card settings-card narrow danger">
-    <div style="font-size:16px;font-weight:600;color:#d33636;margin-bottom:2px;">Delete account</div>
-    <div class="alert alert-danger" role="alert" style="margin:14px 0;">
-        Deleting your account permanently removes it and all associated profile data.
-        <strong>This cannot be undone.</strong>
-    </div>
+@if (_isAdmin)
+{
+    <div class="content-card settings-card narrow danger">
+        <div style="font-size:16px;font-weight:600;color:#d33636;margin-bottom:2px;">Delete account</div>
+        <div class="alert alert-danger" role="alert" style="margin:14px 0;">
+            Deleting your account permanently removes it and all associated profile data.
+            <strong>This cannot be undone.</strong>
+        </div>
 
-    @if (_deleteError is not null)
-    {
-        <div class="alert alert-danger" role="alert" style="margin:0 0 14px;">@_deleteError</div>
-    }
-
-    @* Posts to a dedicated endpoint (not this interactive circuit) so SignOutAsync can
-       write the auth cookie during a real HTTP request. See /Account/DeleteAccount. *@
-    <form action="Account/DeleteAccount" method="post">
-        <AntiforgeryToken />
-
-        @if (_requirePassword)
+        @if (_deleteError is not null)
         {
-            <div class="mb-3">
-                <div class="field-label">Confirm your password</div>
-                <input type="password" name="password" class="form-control"
-                       autocomplete="current-password" placeholder="Current password" required />
-            </div>
+            <div class="alert alert-danger" role="alert" style="margin:0 0 14px;">@_deleteError</div>
         }
 
-        <button type="submit" class="btn btn-danger" style="border-radius:10px;padding:12px 24px;">Delete my account</button>
-    </form>
-</div>
+        @* Posts to a dedicated endpoint (not this interactive circuit) so SignOutAsync can
+           write the auth cookie during a real HTTP request. See /Account/DeleteAccount. *@
+        <form action="Account/DeleteAccount" method="post">
+            <AntiforgeryToken />
+
+            @if (_requirePassword)
+            {
+                <div class="mb-3">
+                    <div class="field-label">Confirm your password</div>
+                    <input type="password" name="password" class="form-control"
+                           autocomplete="current-password" placeholder="Current password" required />
+                </div>
+            }
+
+            <button type="submit" class="btn btn-danger" style="border-radius:10px;padding:12px 24px;">Delete my account</button>
+        </form>
+    </div>
+}
 
 @code {
     private ApplicationUser _user = default!;

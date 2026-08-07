@@ -26,6 +26,8 @@ namespace minutesheet.Data
         }
 
         public static string StatusFor(MinuteSheet sheet) =>
-            IsFullyApproved(sheet.ApprovalSteps) ? "Approved" : "Pending";
+            IsFullyApproved(sheet.ApprovalSteps) ? "Approved"
+            : sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed) ? "Review"
+            : "Pending";
     }
 }
