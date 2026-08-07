@@ -13,7 +13,8 @@ namespace minutesheet.Components.Account
             {
                 await foreach (var job in queue.ReadAllAsync(stoppingToken))
                 {
-                    await sender.SendSheetNotificationAsync(job.To, job.Subject, job.Message, job.Link);
+                    await sender.SendSheetNotificationAsync(job.To, job.Subject, job.Message, job.Link,
+                        job.AttachmentBytes, job.AttachmentName);
                 }
             }
             catch (OperationCanceledException)

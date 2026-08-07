@@ -767,9 +767,12 @@
         transition: background .15s ease;
     }
 
-        .ua-row:last-child {
-            border-bottom: none;
-        }
+    /* ---------- Second row ---------- */
+    .row2-grid {
+        display: grid;
+        grid-template-columns: 1fr 1.4fr;
+        gap: 18px;
+    }
 
         .ua-row:hover {
             background: var(--hover-bg);
@@ -1235,8 +1238,8 @@
                 <div class="ua-row" @onclick="() => GoToSheet(step)">
                     <span class="ua-dot" style="background:@(isReview ? "#3548d4" : "#e2a138")"></span>
                     <div class="ua-main">
-                        <div class="ua-title">@(isReview ? "Review" : "Approve") · @(step.MinuteSheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
-                        <div class="ua-sub">Created @step.MinuteSheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")</div>
+                        <div class="ua-title">@step.MinuteSheet.Title</div>
+                        <div class="ua-sub">@(isReview ? "Review" : "Approve") · @(step.MinuteSheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial") · @step.MinuteSheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy")</div>
                     </div>
                     <span class="badge bg-warning">@(isReview ? "Needs review" : "Pending")</span>
                 </div>
@@ -1310,9 +1313,9 @@
                             <td><span class="badge @badgeClass">@status</span></td>
                         </tr>
                     }
-                }
-            </tbody>
-        </table>
+                </tbody>
+            </table>
+        </div>
     </div>
 
 </div>

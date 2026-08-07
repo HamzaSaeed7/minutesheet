@@ -11,7 +11,6 @@
 @attribute [Authorize]
 
 @inject UserManager<ApplicationUser> UserManager
-@inject SignInManager<ApplicationUser> SignInManager
 @inject ApplicationDbContext DbContext
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IWebHostEnvironment Env
@@ -26,84 +25,129 @@
 
 <div class="content-card settings-card narrow" style="margin-bottom:20px;">
     <div style="font-size:16px;font-weight:600;color:#14173a;margin-bottom:2px;">Profile information</div>
-    <div style="font-size:13px;color:#9296ab;margin-bottom:22px;">Update the details associated with your account.</div>
+    <div style="font-size:13px;color:#9296ab;margin-bottom:22px;">
+        @(_isAdmin ? "Update the details associated with this account." : "This information is managed by an administrator.")
+    </div>
 
-    <EditForm Model="Input" FormName="profile" OnValidSubmit="OnSaveProfileAsync" method="post"
-              enctype="multipart/form-data">
-        <DataAnnotationsValidator />
-        <ValidationSummary class="text-danger" role="alert" />
+    @if (_isAdmin)
+    {
+        <EditForm Model="Input" FormName="profile" OnValidSubmit="OnSaveProfileAsync" method="post"
+                  enctype="multipart/form-data">
+            <DataAnnotationsValidator />
+            <ValidationSummary class="text-danger" role="alert" />
 
-        <div class="d-flex align-items-center gap-3" style="margin-bottom:22px;">
-            <div class="avatar-preview">
-                @if (!string.IsNullOrEmpty(_user?.AvatarPath))
-                {
-                    <img src="@($"/{_user.AvatarPath}?v={_avatarVersion}")" alt="Profile picture" />
-                }
-                else
-                {
-                    <span class="avatar-initials">@Initials(_user?.FullName, _email)</span>
-                }
+            <div class="d-flex align-items-center gap-3" style="margin-bottom:22px;">
+                <div class="avatar-preview">
+                    @if (!string.IsNullOrEmpty(_user?.AvatarPath))
+                    {
+                        <img src="@($"/{_user.AvatarPath}?v={_avatarVersion}")" alt="Profile picture" />
+                    }
+                    else
+                    {
+                        <span class="avatar-initials">@Initials(_user?.FullName, _email)</span>
+                    }
+                </div>
+                <div>
+                    <div style="font-size:13.5px;font-weight:600;color:#1a1d2e;margin-bottom:6px;">Profile picture</div>
+                    <label class="upload-btn" for="avatar-input">
+                        Upload new photo
+                    </label>
+                    <InputFile id="avatar-input" class="d-none" accept=".png,.jpg,.jpeg,.webp,.gif" OnChange="OnAvatarSelected" />
+                    <div class="form-text" style="font-size:12px;">PNG, JPG, WEBP or GIF, up to 5 MB.</div>
+                    @if (!string.IsNullOrEmpty(_avatarError))
+                    {
+                        <div class="text-danger small mt-1">@_avatarError</div>
+                    }
+                </div>
             </div>
-            <div>
-                <div style="font-size:13.5px;font-weight:600;color:#1a1d2e;margin-bottom:6px;">Profile picture</div>
-                <label class="upload-btn" for="avatar-input">
-                    Upload new photo
-                </label>
-                <InputFile id="avatar-input" class="d-none" accept=".png,.jpg,.jpeg,.webp,.gif" OnChange="OnAvatarSelected" />
-                <div class="form-text" style="font-size:12px;">PNG, JPG, WEBP or GIF, up to 5 MB.</div>
-                @if (!string.IsNullOrEmpty(_avatarError))
-                {
-                    <div class="text-danger small mt-1">@_avatarError</div>
-                }
+
+            <div class="settings-grid">
+                <div class="col-full">
+                    <div class="field-label">Email</div>
+                    <input type="text" value="@_email" class="form-control" disabled />
+                    <div class="form-text">Email changes are managed from the account area.</div>
+                </div>
+                <div>
+                    <div class="field-label">Full name</div>
+                    <InputText @bind-Value="Input.FullName" class="form-control" autocomplete="name" placeholder="Full name" />
+                    <ValidationMessage For="() => Input.FullName" class="text-danger" />
+                </div>
+                <div>
+                    <div class="field-label">Employee No.</div>
+                    <InputText @bind-Value="Input.EmployeeNo" class="form-control" placeholder="Employee number" />
+                    <ValidationMessage For="() => Input.EmployeeNo" class="text-danger" />
+                </div>
+                <div>
+                    <div class="field-label">Designation</div>
+                    <InputSelect @bind-Value="Input.Designation" class="form-select">
+                        @foreach (var d in Enum.GetValues<Designation>())
+                        {
+                            <option value="@d">@DisplayName(d)</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="() => Input.Designation" class="text-danger" />
+                </div>
+                <div>
+                    <div class="field-label">Department</div>
+                    <InputSelect @bind-Value="Input.DepartmentId" class="form-select">
+                        <option value="">-- Select department --</option>
+                        @foreach (var dept in _departments)
+                        {
+                            <option value="@dept.Id">@dept.Name</option>
+                        }
+                    </InputSelect>
+                    <ValidationMessage For="() => Input.DepartmentId" class="text-danger" />
+                </div>
+                <div class="col-full">
+                    <div class="field-label">Phone number <span class="text-muted fw-normal">(optional)</span></div>
+                    <InputText @bind-Value="Input.PhoneNumber" class="form-control" autocomplete="tel" placeholder="Phone number" />
+                    <ValidationMessage For="() => Input.PhoneNumber" class="text-danger" />
+                </div>
             </div>
+
+            <button type="submit" class="btn btn-primary" style="border-radius:10px;padding:12px 26px;margin-top:22px;">Save changes</button>
+        </EditForm>
+    }
+    else
+    {
+        <div class="avatar-preview" style="margin-bottom:18px;">
+            @if (!string.IsNullOrEmpty(_user?.AvatarPath))
+            {
+                <img src="@($"/{_user.AvatarPath}?v={_avatarVersion}")" alt="Profile picture" />
+            }
+            else
+            {
+                <span class="avatar-initials">@Initials(_user?.FullName, _email)</span>
+            }
         </div>
 
-        <div class="settings-grid">
+        <div class="settings-grid readonly">
             <div class="col-full">
                 <div class="field-label">Email</div>
-                <input type="text" value="@_email" class="form-control" disabled />
-                <div class="form-text">Email changes are managed from the account area.</div>
+                <div class="static-value">@_email</div>
             </div>
             <div>
                 <div class="field-label">Full name</div>
-                <InputText @bind-Value="Input.FullName" class="form-control" autocomplete="name" placeholder="Full name" />
-                <ValidationMessage For="() => Input.FullName" class="text-danger" />
+                <div class="static-value">@(_user?.FullName ?? "\u2014")</div>
             </div>
             <div>
                 <div class="field-label">Employee No.</div>
-                <InputText @bind-Value="Input.EmployeeNo" class="form-control" placeholder="Employee number" />
-                <ValidationMessage For="() => Input.EmployeeNo" class="text-danger" />
+                <div class="static-value">@(_user?.EmployeeNo ?? "\u2014")</div>
             </div>
             <div>
                 <div class="field-label">Designation</div>
-                <InputSelect @bind-Value="Input.Designation" class="form-select">
-                    @foreach (var d in Enum.GetValues<Designation>())
-                    {
-                        <option value="@d">@DisplayName(d)</option>
-                    }
-                </InputSelect>
-                <ValidationMessage For="() => Input.Designation" class="text-danger" />
+                <div class="static-value">@DisplayName(_user?.Designation ?? Designation.Executive)</div>
             </div>
             <div>
                 <div class="field-label">Department</div>
-                <InputSelect @bind-Value="Input.DepartmentId" class="form-select">
-                    <option value="">-- Select department --</option>
-                    @foreach (var dept in _departments)
-                    {
-                        <option value="@dept.Id">@dept.Name</option>
-                    }
-                </InputSelect>
-                <ValidationMessage For="() => Input.DepartmentId" class="text-danger" />
+                <div class="static-value">@CurrentDepartmentName()</div>
             </div>
             <div class="col-full">
-                <div class="field-label">Phone number <span class="text-muted fw-normal">(optional)</span></div>
-                <InputText @bind-Value="Input.PhoneNumber" class="form-control" autocomplete="tel" placeholder="Phone number" />
-                <ValidationMessage For="() => Input.PhoneNumber" class="text-danger" />
+                <div class="field-label">Phone number</div>
+                <div class="static-value">@(_user?.PhoneNumber ?? "\u2014")</div>
             </div>
         </div>
-
-        <button type="submit" class="btn btn-primary" style="border-radius:10px;padding:12px 26px;margin-top:22px;">Save changes</button>
-    </EditForm>
+    }
 </div>
 
 <div class="content-card settings-card narrow" style="margin-bottom:20px;">
@@ -140,22 +184,27 @@
         <strong>This cannot be undone.</strong>
     </div>
 
-    <EditForm Model="Delete" FormName="delete-account" OnValidSubmit="OnDeleteAccountAsync" method="post">
-        <DataAnnotationsValidator />
-        <ValidationSummary class="text-danger" role="alert" />
+    @if (_deleteError is not null)
+    {
+        <div class="alert alert-danger" role="alert" style="margin:0 0 14px;">@_deleteError</div>
+    }
+
+    @* Posts to a dedicated endpoint (not this interactive circuit) so SignOutAsync can
+       write the auth cookie during a real HTTP request. See /Account/DeleteAccount. *@
+    <form action="Account/DeleteAccount" method="post">
+        <AntiforgeryToken />
 
         @if (_requirePassword)
         {
             <div class="mb-3">
                 <div class="field-label">Confirm your password</div>
-                <InputText type="password" @bind-Value="Delete.Password" class="form-control"
-                           autocomplete="current-password" placeholder="Current password" />
-                <ValidationMessage For="() => Delete.Password" class="text-danger" />
+                <input type="password" name="password" class="form-control"
+                       autocomplete="current-password" placeholder="Current password" required />
             </div>
         }
 
         <button type="submit" class="btn btn-danger" style="border-radius:10px;padding:12px 24px;">Delete my account</button>
-    </EditForm>
+    </form>
 </div>
 
 @code {
@@ -163,8 +212,10 @@
     private string? _email;
     private int? _originalDepartmentId;
     private bool _requirePassword;
+    private bool _isAdmin;
     private string? _message;
     private string? _avatarError;
+    private string? _deleteError;
     private string _avatarVersion = "1";
     private List<Department> _departments = new();
     private bool _is2faEnabled;
@@ -180,9 +231,9 @@
     [SupplyParameterFromForm(FormName = "profile")]
     private ProfileModel Input { get => _input; set => _input = value ?? new(); }
 
-    private DeleteModel _delete = new();
-    [SupplyParameterFromForm(FormName = "delete-account")]
-    private DeleteModel Delete { get => _delete; set => _delete = value ?? new(); }
+    // Set when /Account/DeleteAccount redirects back after a failed deletion.
+    [SupplyParameterFromQuery(Name = "deleteError")]
+    private string? DeleteError { get; set; }
 
     protected override async Task OnInitializedAsync()
     {
@@ -197,12 +248,20 @@
             ?? throw new InvalidOperationException("Unable to load the current user.");
 
         _email = _user.Email;
+        _isAdmin = authState.User.IsInRole(Roles.Admin);
         _originalDepartmentId = _user.DepartmentId;
         _requirePassword = await UserManager.HasPasswordAsync(_user);
         _departments = await DbContext.Departments.OrderBy(d => d.Name).ToListAsync();
         _avatarVersion = DateTime.UtcNow.Ticks.ToString();
         _is2faEnabled = await UserManager.GetTwoFactorEnabledAsync(_user);
         _recoveryCodesLeft = await UserManager.CountRecoveryCodesAsync(_user);
+
+        _deleteError = DeleteError switch
+        {
+            "password" => "Incorrect password. Your account was not deleted.",
+            null => null,
+            _ => "We couldn't delete your account. Please try again."
+        };
 
         // Seed the form once when the interactive page initializes.
         Input.FullName = _user.FullName;
@@ -214,6 +273,12 @@
 
     private async Task OnSaveProfileAsync()
     {
+        if (!_isAdmin)
+        {
+            _message = "Only administrators can edit profile information.";
+            return;
+        }
+
         _user.FullName = Input.FullName;
         _user.EmployeeNo = Input.EmployeeNo;
         _user.Designation = Input.Designation;
@@ -241,6 +306,12 @@
 
     private async Task OnAvatarSelected(InputFileChangeEventArgs e)
     {
+        if (!_isAdmin)
+        {
+            _avatarError = "Only administrators can update the profile picture.";
+            return;
+        }
+
         _avatarError = null;
 
         var file = e.File;
@@ -292,32 +363,6 @@
         Logger.LogInformation("User {Email} updated their profile picture.", _email);
     }
 
-    private async Task OnDeleteAccountAsync()
-    {
-        if (_requirePassword && !await UserManager.CheckPasswordAsync(_user, Delete.Password))
-        {
-            _message = "Error: Incorrect password.";
-            return;
-        }
-
-        var departmentId = _user.DepartmentId;
-        var avatarPath = _user.AvatarPath;
-        var userId = await UserManager.GetUserIdAsync(_user);
-
-        var result = await UserManager.DeleteAsync(_user);
-        if (!result.Succeeded)
-        {
-            _message = $"Error: {string.Join(", ", result.Errors.Select(e => e.Description))}";
-            return;
-        }
-
-        DeleteAvatarFile(avatarPath);
-        await AdjustDepartmentCountAsync(departmentId, delta: -1);
-        await SignInManager.SignOutAsync();
-
-        Logger.LogInformation("User with ID '{UserId}' deleted their account.", userId);
-        NavigationManager.NavigateTo("Account/Login", forceLoad: true);
-    }
 
     private async Task AdjustDepartmentCountAsync(int? departmentId, int delta)
     {
@@ -353,6 +398,15 @@
         {
             // Best-effort cleanup; a leftover file is not worth failing the request.
         }
+    }
+
+    private string CurrentDepartmentName()
+    {
+        if (_user?.DepartmentId is not int id)
+        {
+            return "\u2014";
+        }
+        return _departments.FirstOrDefault(d => d.Id == id)?.Name ?? "\u2014";
     }
 
     private static string Initials(string? fullName, string? email)
@@ -401,11 +455,5 @@
         [Phone]
         [Display(Name = "Phone number")]
         public string? PhoneNumber { get; set; }
-    }
-
-    private sealed class DeleteModel
-    {
-        [DataType(DataType.Password)]
-        public string Password { get; set; } = "";
     }
 }

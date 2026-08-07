@@ -36,6 +36,13 @@
     <button type="submit" class="w-100 btn btn-link">Resend code</button>
 </EditForm>
 
+<hr />
+
+<!-- TEMPORARY: bypasses the login OTP for testing while SMTP is unreliable. Remove before production. -->
+<EditForm Model="Dev" method="post" OnValidSubmit="DevVerify" FormName="dev-login" class="mt-2">
+    <button type="submit" class="w-100 btn btn-outline-secondary">Verify now (skip code — temporary)</button>
+</EditForm>
+
 <p class="auth-footer">
     <a href="Account/Login">Back to login</a>
 </p>
@@ -53,6 +60,10 @@
     private ResendModel _resend = new();
     [SupplyParameterFromForm(FormName = "resend-login-otp")]
     private ResendModel Resend { get => _resend; set => _resend = value ?? new(); }
+
+    private DevModel _dev = new();
+    [SupplyParameterFromForm(FormName = "dev-login")]
+    private DevModel Dev { get => _dev; set => _dev = value ?? new(); }
 
     [SupplyParameterFromQuery]
     private string? Email { get; set; }
@@ -117,6 +128,20 @@
             : "Error: We couldn't send the email right now. Please try again in a moment.";
     }
 
+    // TEMPORARY: signs in without checking the emailed code. Remove before production.
+    private async Task DevVerify()
+    {
+        var user = await ResolveUserAsync();
+        if (user is null)
+        {
+            return;
+        }
+
+        Logger.LogWarning("User {Email} logged in via TEMPORARY skip-code button.", Email);
+        await SignInManager.SignInAsync(user, isPersistent: RememberMe);
+        RedirectManager.RedirectToWithStatus(ReturnUrl ?? "", "You're logged in. Welcome back!", HttpContext);
+    }
+
     private sealed class InputModel
     {
         [Required]
@@ -126,6 +151,10 @@
     }
 
     private sealed class ResendModel
+    {
+    }
+
+    private sealed class DevModel
     {
     }
 }

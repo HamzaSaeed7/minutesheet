@@ -51,6 +51,12 @@ else
         }
 
         <div class="content-card">
+            <div class="card-eyebrow" style="margin-bottom:10px;">Title</div>
+            <input type="text" class="form-control" maxlength="200" placeholder="Give this minute sheet a title"
+                   @bind="_title" @bind:event="oninput" />
+        </div>
+
+        <div class="content-card">
             <div class="card-eyebrow" style="margin-bottom:10px;">Category</div>
             <div class="seg-tabs">
                 <button type="button" class="seg-tab @(_category == SheetCategory.Financial ? "active" : "")" @onclick="() => _category = SheetCategory.Financial">Financial</button>
@@ -73,12 +79,11 @@ else
             <div class="d-flex align-items-center justify-content-between" style="margin-bottom:10px;">
                 <div class="card-eyebrow">Description</div>
                 <div class="d-flex align-items-center" style="gap:8px;">
-                    <select id="dictateLang" class="form-select form-select-sm" style="width:auto;" aria-label="Dictation language">
+                    <select id="dictateLang" class="form-select form-select-sm" style="width:auto;" aria-label="Dictation language" @bind="_dictationLanguage">
                         <option value="en-US">English</option>
                         <option value="ur-PK">Urdu</option>
                     </select>
-                    <button type="button" class="dictate-btn"
-                            onclick="quillInterop.toggleDictation('editor', this, document.getElementById('dictateLang').value)"
+                    <button type="button" class="dictate-btn" @ref="_dictateBtn" @onclick="HandleDictation"
                             aria-label="Dictate description" title="Dictate with your voice">
                         <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3Z"></path><path d="M19 10v2a7 7 0 0 1-14 0v-2"></path><line x1="12" y1="19" x2="12" y2="23"></line><line x1="8" y1="23" x2="16" y2="23"></line></svg>
                         <span class="dictate-label">Dictate</span>
@@ -111,6 +116,29 @@ else
                     <div class="dropzone-text">
                         <span class="dropzone-link">@_selectedFile.Name</span> (@(_selectedFile.Size / 1024) KB)<br />
                         Click to replace
+                    </div>
+                }
+            </div>
+
+        </div>
+
+        <div class="content-card">
+            <div class="card-eyebrow" style="margin-bottom:12px;">AI Insights</div>
+            <div class="d-flex flex-column" style="gap:10px;">
+                <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingInsights" @onclick="GenerateAllAiInsightsAsync">
+                    @(_generatingInsights ? "Processing AI Insights..." : "Generate AI Insights")
+                </button>
+                @if (!string.IsNullOrEmpty(_summary))
+                {
+                    <div class="card-eyebrow" style="margin-top:8px;">Meeting Summary</div>
+                    <div class="form-control" style="font-family: 'Poppins', sans-serif; font-size: 14px; white-space: pre-wrap; min-height: 120px; height: auto; overflow: hidden;">@_summary</div>
+                    <div class="d-flex flex-wrap" style="gap:8px;">
+                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadDocxAsync" disabled="@_downloading">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Word (.docx)
+                        </button>
+                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadPdfAsync" disabled="@_downloading">
+                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>PDF
+                        </button>
                     </div>
                 }
             </div>
@@ -238,64 +266,57 @@ else
                 <text>Approvers are notified by email as soon as you submit. Review steps require a comment before moving on; approval steps don't.</text>
             }
         </div>
-        <div class="content-card">
-            <div class="card-eyebrow" style="margin-bottom:12px;">AI Summary</div>
-            <div class="d-flex flex-column" style="gap:10px;">
-                <button type="button" class="btn btn-primary" style="background-color: #000066; border-color: #000066; font-family: 'Poppins', sans-serif;" disabled="@_generatingSummary" @onclick="GenerateSummaryAsync">
-                    @(_generatingSummary ? "Generating Summary..." : "Generate Summary")
-                </button>
-                @if (!string.IsNullOrEmpty(_summary))
+        @if (_actionItems.Any() || _agendaItems.Any())
+        {
+            <div class="content-card d-flex flex-column" style="gap: 16px;">
+                @if (_actionItems.Any())
                 {
-                    <textarea class="form-control" rows="6" readonly style="font-family: 'Poppins', sans-serif; font-size: 14px; resize: vertical;">@_summary</textarea>
-                    @if (_actions.Count > 0 || _decisions.Count > 0)
-                    {
-                        <div style="display:grid;gap:10px;font-family:'Poppins',sans-serif;">
-                            @if (_actions.Count > 0)
-                            {
-                                <div style="background:#f0f4ff;border:1px solid #d3e0ff;border-left:4px solid #000066;border-radius:6px;padding:10px 14px;">
-                                    <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#000066;margin-bottom:6px;font-size:13px;">
-                                        <span style="width:8px;height:8px;border-radius:50%;background:#000066;display:inline-block;"></span>
-                                        Actions
-                                    </div>
-                                    <ul style="margin:0;padding-left:18px;font-size:13px;">
-                                        @foreach (var item in _actions)
-                                        {
-                                            <li style="margin-bottom:3px;">@item</li>
-                                        }
-                                    </ul>
+                    <div>
+                        <div class="card-eyebrow" style="margin-bottom:6px; color:#000066;">Extracted Action Items</div>
+                        <small class="text-muted d-block mb-2" style="font-size: 12px;">You can manually edit this list before submitting.</small>
+                        
+                        @foreach (var item in _actionItems)
+                        {
+                            <div class="d-flex flex-column gap-1 mb-3" style="background:#f8f9fa; padding:10px; border-radius:6px; border: 1px solid #e2e8f0;">
+                                <input type="text" class="form-control form-control-sm" @bind="item.Task" placeholder="Task" />
+                                <div class="d-flex gap-2">
+                                    <input type="text" class="form-control form-control-sm" @bind="item.Owner" placeholder="Owner" />
+                                    <input type="text" class="form-control form-control-sm" @bind="item.Deadline" placeholder="Deadline" />
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _actionItems.Remove(item)">&times;</button>
                                 </div>
-                            }
-                            @if (_decisions.Count > 0)
-                            {
-                                <div style="background:#f2faf7;border:1px solid #d2ece3;border-left:4px solid #1a8a5a;border-radius:6px;padding:10px 14px;">
-                                    <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#1a8a5a;margin-bottom:6px;font-size:13px;">
-                                        <span style="width:8px;height:8px;border-radius:50%;background:#1a8a5a;display:inline-block;"></span>
-                                        Decisions
-                                    </div>
-                                    <ul style="margin:0;padding-left:18px;font-size:13px;">
-                                        @foreach (var item in _decisions)
-                                        {
-                                            <li style="margin-bottom:3px;">@item</li>
-                                        }
-                                    </ul>
+                            </div>
+                        }
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" @onclick="() => _actionItems.Add(new minutesheet.Services.ActionItemDto())">+ Add Item</button>
+                    </div>
+                }
+
+                @if (_actionItems.Any() && _agendaItems.Any())
+                {
+                    <hr style="margin: 0; border-color: #e2e8f0;" />
+                }
+
+                @if (_agendaItems.Any())
+                {
+                    <div>
+                        <div class="card-eyebrow" style="margin-bottom:6px; color:#000066;">Suggested Next-Meeting Agenda</div>
+                        <small class="text-muted d-block mb-2" style="font-size: 12px;">You can manually edit this agenda before submitting.</small>
+                        
+                        @foreach (var item in _agendaItems)
+                        {
+                            <div class="d-flex flex-column gap-1 mb-3" style="background:#f8f9fa; padding:10px; border-radius:6px; border: 1px solid #e2e8f0;">
+                                <input type="text" class="form-control form-control-sm" @bind="item.Topic" placeholder="Topic" />
+                                <div class="d-flex gap-2">
+                                    <input type="text" class="form-control form-control-sm" @bind="item.Owner" placeholder="Owner" />
+                                    <input type="text" class="form-control form-control-sm" @bind="item.TimeBox" placeholder="Time box" />
+                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _agendaItems.Remove(item)">&times;</button>
                                 </div>
-                            }
-                        </div>
-                    }
-                    <div class="d-flex flex-wrap" style="gap:8px;">
-                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadDocxAsync" disabled="@_downloading">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Word (.docx)
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadDocAsync" disabled="@_downloading">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>Word (.doc)
-                        </button>
-                        <button type="button" class="btn btn-sm btn-outline-primary" style="font-family: 'Poppins', sans-serif;" @onclick="DownloadPdfAsync" disabled="@_downloading">
-                            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-1px;"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>PDF
-                        </button>
+                            </div>
+                        }
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" @onclick="() => _agendaItems.Add(new minutesheet.Services.AgendaItemDto())">+ Add Agenda Item</button>
                     </div>
                 }
             </div>
-        </div>
+        }
     </div>
 </div>
 }
@@ -321,9 +342,12 @@ else
     private string? _summary;
     private List<string> _actions = new();
     private List<string> _decisions = new();
-    private bool _generatingSummary;
     private bool _downloading;
+    private List<minutesheet.Services.ActionItemDto> _actionItems = new();
+    private List<minutesheet.Services.AgendaItemDto> _agendaItems = new();
+    private bool _generatingInsights;
 
+    private string _title = "";
     private SheetCategory _category = SheetCategory.Financial;
     private bool _isConfidential;
     private readonly List<ApprovalRow> _rows = new() { new ApprovalRow { Action = ApprovalAction.Review } };
@@ -332,6 +356,9 @@ else
     private IBrowserFile? _selectedFile;
     private string? _error;
     private bool _saving;
+    private DotNetObjectReference<CreateSheet>? _objRef;
+    private ElementReference _dictateBtn;
+    private string _dictationLanguage = "en-US";
 
     private const int MaxApprovals = 20;
     private static readonly string[] AllowedExtensions = { ".pdf", ".doc", ".docx" };
@@ -339,6 +366,7 @@ else
 
     protected override async Task OnInitializedAsync()
     {
+        _objRef = DotNetObjectReference.Create(this);
         _approverEmails = await DbContext.Users
             .Where(u => u.Email != null)
             .Select(u => u.Email!)
@@ -388,15 +416,23 @@ else
                 else
                 {
                     creatorId = sheet.CreatedByUserId;
+                    _title = sheet.Title;
                     _category = sheet.Category;
                     _isConfidential = sheet.IsConfidential;
                     _initialDescriptionHtml = sheet.DescriptionHtml;
                     _existingAttachmentName = sheet.AttachmentFileName;
                     _existingAttachmentPath = sheet.AttachmentStoredPath;
                     _summary = sheet.Summary;
-                    var (actions, decisions) = ParseActionsDecisions(sheet.ActionsDecisions);
-                    _actions = actions;
-                    _decisions = decisions;
+                    if (!string.IsNullOrEmpty(sheet.ActionItems))
+                    {
+                        try { _actionItems = System.Text.Json.JsonSerializer.Deserialize<List<minutesheet.Services.ActionItemDto>>(sheet.ActionItems) ?? new(); }
+                        catch { _actionItems = new(); }
+                    }
+                    if (!string.IsNullOrEmpty(sheet.NextMeetingAgenda))
+                    {
+                        try { _agendaItems = System.Text.Json.JsonSerializer.Deserialize<List<minutesheet.Services.AgendaItemDto>>(sheet.NextMeetingAgenda) ?? new(); }
+                        catch { _agendaItems = new(); }
+                    }
                     _rows.Clear();
                     _lockedSteps.Clear();
                     foreach (var step in sheet.ApprovalSteps.OrderBy(s => s.StepIndex))
@@ -492,6 +528,12 @@ else
         _saving = true;
         try
         {
+            if (string.IsNullOrWhiteSpace(_title))
+            {
+                ToastService.ShowError("Please enter a title.", "Missing title");
+                return;
+            }
+
             var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
 
             if (string.IsNullOrWhiteSpace(descriptionHtml))
@@ -565,11 +607,13 @@ else
                     sheet.AttachmentFileName = originalName;
                 }
 
+                sheet.Title = _title.Trim();
                 sheet.Category = _category;
                 sheet.IsConfidential = _isConfidential;
                 sheet.DescriptionHtml = descriptionHtml;
                 sheet.Summary = _summary;
-                sheet.ActionsDecisions = SerializeActionsDecisions(_actions, _decisions);
+                sheet.ActionItems = _actionItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_actionItems) : null;
+                sheet.NextMeetingAgenda = _agendaItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_agendaItems) : null;
 
                 // Only rebuild the workflow while every step is still pending. Once
                 // approvals are underway (reviews to resolve), the steps are locked
@@ -596,12 +640,23 @@ else
 
                 if (allPending)
                 {
+                    var actionItemsText = "";
+                    if (_actionItems.Any())
+                    {
+                        actionItemsText = "\n\nAction Items:\n" + string.Join("\n", _actionItems.Select(i => $"- [ ] {i.Task} (Owner: {i.Owner}, Deadline: {i.Deadline})"));
+                    }
+                    var agendaText = "";
+                    if (_agendaItems.Any())
+                    {
+                        agendaText = "\n\nNext Meeting Agenda:\n" + string.Join("\n", _agendaItems.Select(i => $"- {i.Topic} (Owner: {i.Owner}, Time: {i.TimeBox})"));
+                    }
+
                     foreach (var email in _rows.Select(r => r.ApproverEmail).Distinct(StringComparer.OrdinalIgnoreCase))
                     {
                         EmailQueue.Enqueue(new EmailJob(
                             email,
                             "A minute sheet was updated",
-                            $"{createdBy} updated a minute sheet that needs your review or approval.",
+                            $"{createdBy} updated a minute sheet that needs your review or approval.{actionItemsText}{agendaText}",
                             link));
                     }
                 }
@@ -613,11 +668,13 @@ else
             {
                 var sheet = new MinuteSheet
                 {
+                    Title = _title.Trim(),
                     Category = _category,
                     IsConfidential = _isConfidential,
                     DescriptionHtml = descriptionHtml,
                     Summary = _summary,
-                    ActionsDecisions = SerializeActionsDecisions(_actions, _decisions),
+                    ActionItems = _actionItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_actionItems) : null,
+                    NextMeetingAgenda = _agendaItems.Any() ? System.Text.Json.JsonSerializer.Serialize(_agendaItems) : null,
                     AttachmentFileName = originalName,
                     AttachmentStoredPath = storedPath,
                     CreatedByUserId = user.Id,
@@ -643,12 +700,24 @@ else
 
                 // Queue the unique sheet link to each distinct approver.
                 link = NavigationManager.ToAbsoluteUri($"dashboard/sheet/{sheetToken}").AbsoluteUri;
+                
+                var actionItemsText = "";
+                if (_actionItems.Any())
+                {
+                    actionItemsText = "\n\nAction Items:\n" + string.Join("\n", _actionItems.Select(i => $"- [ ] {i.Task} (Owner: {i.Owner}, Deadline: {i.Deadline})"));
+                }
+                var agendaText = "";
+                if (_agendaItems.Any())
+                {
+                    agendaText = "\n\nNext Meeting Agenda:\n" + string.Join("\n", _agendaItems.Select(i => $"- {i.Topic} (Owner: {i.Owner}, Time: {i.TimeBox})"));
+                }
+
                 foreach (var email in _rows.Select(r => r.ApproverEmail).Distinct(StringComparer.OrdinalIgnoreCase))
                 {
                     EmailQueue.Enqueue(new EmailJob(
                         email,
                         "A minute sheet needs your approval",
-                        $"{createdBy} submitted a minute sheet that needs your review or approval.",
+                        $"{createdBy} submitted a minute sheet that needs your review or approval.{actionItemsText}{agendaText}",
                         link));
                 }
 
@@ -751,10 +820,10 @@ else
         return (parts[0][..1] + parts[^1][..1]).ToUpperInvariant();
     }
 
-    private async Task GenerateSummaryAsync()
+    private async Task GenerateAllAiInsightsAsync()
     {
         _error = null;
-        _generatingSummary = true;
+        _generatingInsights = true;
         try
         {
             var authState = await AuthState;
@@ -774,8 +843,10 @@ else
             var creatorEmpNo = user.EmployeeNo ?? "N/A";
 
             var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
-            
-            var result = await SummarizationService.GenerateSummaryAsync(
+            var plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
+
+            // Start tasks in parallel
+            var summaryTask = SummarizationService.GenerateSummaryAsync(
                 _category.ToString(), 
                 creatorName, 
                 creatorDesignation, 
@@ -783,23 +854,59 @@ else
                 creatorEmpNo, 
                 descriptionHtml, 
                 _selectedFile);
+            var actionItemsTask = SummarizationService.ExtractActionItemsAsync(plainText);
+            var agendaTask = SummarizationService.GenerateAgendaAsync(plainText);
 
+            // Await all concurrently
+            await Task.WhenAll(summaryTask, actionItemsTask, agendaTask);
+
+            // 1. Assign Summary
+            var result = summaryTask.Result;
             _summary = result.Summary;
             _actions = result.Actions;
             _decisions = result.Decisions;
 
-            ToastService.ShowSuccess("Summary generated for your minute sheet.", "Summary ready");
+            // 2. Assign Tasks
+            try
+            {
+                var taskResultJson = actionItemsTask.Result;
+                var taskResponse = System.Text.Json.JsonSerializer.Deserialize<minutesheet.Services.ActionItemsResponseDto>(taskResultJson);
+                if (taskResponse?.ActionItems != null)
+                {
+                    _actionItems = taskResponse.ActionItems;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error parsing action items: {ex.Message}");
+            }
+
+            // 3. Assign Agenda
+            try
+            {
+                var agendaResultJson = agendaTask.Result;
+                var agendaResponse = System.Text.Json.JsonSerializer.Deserialize<minutesheet.Services.AgendaResponseDto>(agendaResultJson);
+                if (agendaResponse?.AgendaItems != null)
+                {
+                    _agendaItems = agendaResponse.AgendaItems;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error parsing agenda items: {ex.Message}");
+            }
+
+            ToastService.ShowSuccess("AI Insights generated successfully.", "Insights ready");
         }
         catch (Exception ex)
         {
-            ToastService.ShowError($"Failed to generate summary: {ex.Message}", "Error");
+            ToastService.ShowError($"Failed to generate insights: {ex.Message}", "Error");
         }
         finally
         {
-            _generatingSummary = false;
+            _generatingInsights = false;
         }
     }
-
     private async Task DownloadDocxAsync() => await DownloadSummaryAsync("docx");
     private async Task DownloadDocAsync() => await DownloadSummaryAsync("doc");
     private async Task DownloadPdfAsync() => await DownloadSummaryAsync("pdf");
@@ -877,8 +984,107 @@ else
         return System.Text.RegularExpressions.Regex.Replace(html, @"[ \t]{2,}", " ").Trim();
     }
 
+    private async Task HandleDictation()
+    {
+        if (_dictationLanguage == "ur-PK" && _objRef is not null)
+        {
+            await JS.InvokeVoidAsync("quillInterop.startIntelligentDictation", "editor", _dictateBtn, _objRef);
+            var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+
+            var content = new SheetExporter.ExportContent(
+                Title: string.IsNullOrWhiteSpace(_title) ? $"Minute Sheet - {_category}" : _title.Trim(),
+                Category: _category.ToString(),
+                Confidentiality: _isConfidential ? "Confidential" : "Non-Confidential",
+                Date: DateTime.Now.ToString("dd MMM yyyy hh:mm tt"),
+                PreparedBy: _creator is null
+                    ? "-"
+                    : string.IsNullOrWhiteSpace(_creator.FullName)
+                        ? _creator.Email
+                        : $"{_creator.FullName} ({_creator.Email})",
+                Description: HtmlToPlainText(descriptionHtml),
+                Summary: _summary);
+
+            byte[] bytes;
+            string mime;
+            string ext;
+            switch (format)
+            {
+                _agendaItems = response.AgendaItems;
+            }
+        }
+        else
+        {
+            await JS.InvokeVoidAsync("quillInterop.toggleDictation", "editor", _dictateBtn, _dictationLanguage);
+        }
+    }
+
+    [JSInvokable]
+    public async Task<string> TranslateUrduToEnglish(string urduText)
+    {
+        return await SummarizationService.TranslateUrduToEnglishAsync(urduText);
+    }
+
+    private bool _downloading;
+
+    private async Task<SheetExporter.ExportContent> BuildExportContentAsync()
+    {
+        var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
+        var plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
+
+        var preparedBy = _creator is not null && !string.IsNullOrWhiteSpace(_creator.FullName)
+            ? _creator.FullName
+            : _creator?.Email ?? "";
+
+        return new SheetExporter.ExportContent(
+            Title: "Minute Sheet",
+            Category: _category.ToString(),
+            Confidentiality: _isConfidential ? "Confidential" : "Non-Confidential",
+            Date: DateTime.Now.ToString("dd MMM yyyy"),
+            PreparedBy: preparedBy,
+            Description: plainText,
+            Summary: _summary ?? "");
+    }
+
+    private async Task DownloadDocxAsync()
+    {
+        await DownloadAsync("minute-sheet.docx", "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            c => SheetExporter.BuildDocx(c));
+    }
+
+    private async Task DownloadDocAsync()
+    {
+        await DownloadAsync("minute-sheet.doc", "application/msword",
+            c => SheetExporter.BuildDoc(c));
+    }
+
+    private async Task DownloadPdfAsync()
+    {
+        await DownloadAsync("minute-sheet.pdf", "application/pdf",
+            c => SheetExporter.BuildPdf(c));
+    }
+
+    private async Task DownloadAsync(string fileName, string mimeType, Func<SheetExporter.ExportContent, byte[]> build)
+    {
+        _downloading = true;
+        try
+        {
+            var content = await BuildExportContentAsync();
+            var bytes = build(content);
+            await JS.InvokeVoidAsync("quillInterop.downloadFile", fileName, mimeType, Convert.ToBase64String(bytes));
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowError($"Could not download: {ex.Message}", "Error");
+        }
+        finally
+        {
+            _downloading = false;
+        }
+    }
+
     public async ValueTask DisposeAsync()
     {
+        _objRef?.Dispose();
         // Drop the cached Quill instance so a later visit re-initialises cleanly.
         // Best-effort: during teardown/navigation JS interop may be unavailable
         // (JSDisconnectedException) or disallowed mid-render (InvalidOperationException).

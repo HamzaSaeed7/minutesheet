@@ -14,6 +14,7 @@
 @inject IConfiguration Configuration
 @inject UserManager<ApplicationUser> UserManager
 @inject EmailQueue EmailQueue
+@inject minutesheet.Services.SheetPdfService PdfService
 @inject NavigationManager NavigationManager
 @inject IWebHostEnvironment Env
 @inject IJSRuntime JS
@@ -65,6 +66,10 @@ else
             {
                 <a href="dashboard/sheet/@Token/edit" class="btn btn-outline-primary btn-sm">Edit</a>
             }
+            @if (_isCreator || _isApprover || _isAdmin)
+            {
+                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenShare">Share</button>
+            }
             @if (_isCreator)
             {
                 <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="DeleteSheet">Delete</button>
@@ -91,6 +96,11 @@ else
             </div>
         </div>
 
+        @if (_isViewOnly)
+        {
+            <div class="alert alert-info mb-3">This sheet was shared with you for viewing only. You can leave a suggestion below, but you can't edit or take approval actions.</div>
+        }
+
         @if (!string.IsNullOrEmpty(_sheet.Summary))
         {
             <div class="mb-3">
@@ -99,46 +109,63 @@ else
             </div>
         }
 
-        @{
-            var (_actions, _decisions) = ParseActionsDecisions(_sheet.ActionsDecisions);
-        }
-        @if (_actions.Count > 0 || _decisions.Count > 0)
+        @if (!string.IsNullOrEmpty(_sheet.ActionItems))
         {
-            <div class="mb-3">
-                <div class="creator-label mb-1" style="color: #000066; font-weight: 600;">Actions &amp; Decisions</div>
-                <div style="display:grid;gap:10px;font-family:'Poppins',sans-serif;">
-                    @if (_actions.Count > 0)
-                    {
-                        <div style="background:#f0f4ff;border:1px solid #d3e0ff;border-left:4px solid #000066;border-radius:6px;padding:10px 14px;">
-                            <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#000066;margin-bottom:6px;">
-                                <span style="width:8px;height:8px;border-radius:50%;background:#000066;display:inline-block;"></span>
-                                Actions
-                            </div>
-                            <ul style="margin:0;padding-left:18px;font-size:13.5px;">
-                                @foreach (var item in _actions)
-                                {
-                                    <li style="margin-bottom:3px;">@item</li>
-                                }
-                            </ul>
-                        </div>
-                    }
-                    @if (_decisions.Count > 0)
-                    {
-                        <div style="background:#f2faf7;border:1px solid #d2ece3;border-left:4px solid #1a8a5a;border-radius:6px;padding:10px 14px;">
-                            <div style="display:flex;align-items:center;gap:6px;font-weight:600;color:#1a8a5a;margin-bottom:6px;">
-                                <span style="width:8px;height:8px;border-radius:50%;background:#1a8a5a;display:inline-block;"></span>
-                                Decisions
-                            </div>
-                            <ul style="margin:0;padding-left:18px;font-size:13.5px;">
-                                @foreach (var item in _decisions)
-                                {
-                                    <li style="margin-bottom:3px;">@item</li>
-                                }
-                            </ul>
-                        </div>
-                    }
+            var items = System.Text.Json.JsonSerializer.Deserialize<List<minutesheet.Services.ActionItemDto>>(_sheet.ActionItems);
+            if (items != null && items.Any())
+            {
+                <div class="mb-3">
+                    <div class="creator-label mb-1" style="color: #000066; font-weight: 600;">Action Items</div>
+                    <div class="description-body" style="font-family: 'Poppins', sans-serif; background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
+                        <ul style="list-style: none; padding-left: 0; margin-bottom: 0;">
+                            @foreach (var item in items)
+                            {
+                                <li style="margin-bottom: 6px;">
+                                    <input type="checkbox" disabled style="margin-right: 8px;" />
+                                    <strong>@item.Task</strong>
+                                    @if (!string.IsNullOrEmpty(item.Owner))
+                                    {
+                                        <span class="text-muted" style="margin-left: 8px; font-size: 13px;">(Owner: @item.Owner)</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(item.Deadline))
+                                    {
+                                        <span class="text-muted" style="margin-left: 8px; font-size: 13px;">(Deadline: @item.Deadline)</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </div>
                 </div>
-            </div>
+            }
+        }
+
+        @if (!string.IsNullOrEmpty(_sheet.NextMeetingAgenda))
+        {
+            var agenda = System.Text.Json.JsonSerializer.Deserialize<List<minutesheet.Services.AgendaItemDto>>(_sheet.NextMeetingAgenda);
+            if (agenda != null && agenda.Any())
+            {
+                <div class="mb-3">
+                    <div class="creator-label mb-1" style="color: #000066; font-weight: 600;">Next Meeting Agenda</div>
+                    <div class="description-body" style="font-family: 'Poppins', sans-serif; background-color: #f8f9fa; padding: 12px; border-radius: 6px;">
+                        <ul style="list-style: none; padding-left: 0; margin-bottom: 0;">
+                            @foreach (var item in agenda)
+                            {
+                                <li style="margin-bottom: 6px;">
+                                    <strong>@item.Topic</strong>
+                                    @if (!string.IsNullOrEmpty(item.Owner))
+                                    {
+                                        <span class="text-muted" style="margin-left: 8px; font-size: 13px;">(Owner: @item.Owner)</span>
+                                    }
+                                    @if (!string.IsNullOrEmpty(item.TimeBox))
+                                    {
+                                        <span class="text-muted" style="margin-left: 8px; font-size: 13px;">(Time: @item.TimeBox)</span>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                    </div>
+                </div>
+            }
         }
 
         <div class="mb-3">
@@ -154,6 +181,82 @@ else
             </div>
         }
     </div>
+
+    @if (_showSharePanel)
+    {
+        <div class="content-card mb-4">
+            <div class="d-flex align-items-center justify-content-between" style="margin-bottom:14px;">
+                <div class="section-title mb-0">Share this minute sheet</div>
+                <button type="button" class="btn-close" aria-label="Close" @onclick="CloseShare"></button>
+            </div>
+
+            <div class="mb-3" style="position:relative;">
+                <label class="form-label mb-1" style="font-size:13px;font-weight:600;">Search people to share with</label>
+                <input class="form-control" placeholder="Search by name, email, or employee number..."
+                       value="@_shareSearch" @oninput="OnShareSearch" @onfocus="() => _showShareDropdown = true" @onblur="HideShareDropdown" />
+                @if (_showShareDropdown)
+                {
+                    <div class="share-dropdown">
+                        @if (_shareFiltered.Count == 0)
+                        {
+                            <div class="share-dropdown-empty">No users match your search.</div>
+                        }
+                        else
+                        {
+                            @foreach (var u in _shareFiltered)
+                            {
+                                var email = u.Email ?? "";
+                                var already = _selectedShares.Contains(email);
+                                <button type="button" class="share-dropdown-item" disabled="@already" @onmousedown="() => AddShareUser(email)">
+                                    <span style="font-weight:500;font-size:13.5px;">@(string.IsNullOrWhiteSpace(u.FullName) ? email : u.FullName)</span>
+                                    <span class="text-muted" style="font-size:12px;">@email</span>
+                                    <span class="text-muted" style="font-size:12px;">Emp #@u.EmployeeNo</span>
+                                    @if (already)
+                                    {
+                                        <span class="badge bg-secondary" style="margin-left:auto;">Added</span>
+                                    }
+                                </button>
+                            }
+                        }
+                    </div>
+                }
+                <div class="form-text">Type to search, then click a person to add them. You can add several people before sharing.</div>
+            </div>
+
+            <div class="d-flex gap-2 mb-3">
+                <input class="form-control" placeholder="Add an email manually..." value="@_shareEmailInput" @oninput="e => _shareEmailInput = e.Value?.ToString()" />
+                <button type="button" class="btn btn-outline-secondary" @onclick="AddManualEmail">Add</button>
+            </div>
+
+            @if (_selectedShares.Any())
+            {
+                <div class="d-flex flex-wrap align-items-center" style="gap:6px;margin-bottom:12px;">
+                    @foreach (var email in _selectedShares)
+                    {
+                        <span class="badge bg-secondary d-inline-flex align-items-center" style="padding:6px 10px;font-size:12.5px;">
+                            @email
+                            <button type="button" class="btn-close btn-close-white" style="font-size:8px;margin-left:6px;" aria-label="Remove" @onclick="() => RemoveShare(email)"></button>
+                        </span>
+                    }
+                </div>
+            }
+
+            @if (!string.IsNullOrEmpty(_shareError))
+            {
+                <div class="alert alert-danger">@_shareError</div>
+            }
+            @if (!string.IsNullOrEmpty(_shareSuccess))
+            {
+                <div class="alert alert-success">@_shareSuccess</div>
+            }
+
+            <div class="d-flex justify-content-end" style="gap:10px;">
+                <button type="button" class="btn btn-outline-secondary" @onclick="CloseShare">Cancel</button>
+                <button type="button" class="btn btn-primary" disabled="@_busy" @onclick="SubmitShare">@(_busy ? "Sharing..." : "Share")</button>
+            </div>
+            <div class="form-text mt-2">Recipients get view-only access to this sheet and can leave suggestions.</div>
+        </div>
+    }
 
     <div class="content-card mb-4">
         <div class="section-title mb-3">Approval workflow</div>
@@ -211,6 +314,7 @@ else
                                 <div class="d-flex gap-2">
                                     <button class="btn btn-outline-primary" disabled="@_busy" @onclick="() => MarkReviewed(step.Id)">Review</button>
                                     <button class="btn btn-success" disabled="@_busy" @onclick="() => Approve(step.Id)">Approve</button>
+                                    <button class="btn btn-outline-secondary" disabled="@_busy" @onclick="OpenShare">Share</button>
                                 </div>
                                 <div class="form-text">A review requires a comment; a comment is optional when approving.</div>
                             </div>
@@ -258,6 +362,46 @@ else
             </ul>
         }
     </div>
+
+    <div class="content-card">
+        <div class="section-title mb-3">Suggestions</div>
+        @if (_suggestions.Count == 0)
+        {
+            <p class="text-muted mb-0">No suggestions yet.</p>
+        }
+        else
+        {
+            <ul class="comment-thread">
+                @foreach (var s in _suggestions)
+                {
+                    <li class="comment-item">
+                        <div class="comment-avatar">@Initials(s.AuthorName, null)</div>
+                        <div class="comment-bubble">
+                            <div class="comment-head">
+                                <span class="fw-semibold" style="font-size:13.5px;">@s.AuthorName</span>
+                                <span class="badge @(s.IsAllOk ? "bg-success" : "bg-info text-dark")" style="font-size:11px;">@(s.IsAllOk ? "All OK" : "Suggestion")</span>
+                                <span class="text-muted" style="font-size:12px;">@s.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</span>
+                            </div>
+                            <div class="comment-body">@(s.IsAllOk ? "It's all OK — no changes needed." : s.Body)</div>
+                        </div>
+                    </li>
+                }
+            </ul>
+        }
+
+        @if (_isSharedWithMe)
+        {
+            <div class="action-zone mt-3">
+                <div class="fw-semibold mb-2">Suggest something to add</div>
+                <textarea class="form-control mb-2" rows="3" placeholder="What would you add or change in this minute sheet?"
+                          value="@_suggestionDraft" @oninput="e => _suggestionDraft = e.Value?.ToString()"></textarea>
+                <div class="d-flex gap-2">
+                    <button class="btn btn-outline-primary" disabled="@_busy" @onclick="SubmitSuggestion">Send suggestion</button>
+                    <button class="btn btn-success" disabled="@_busy" @onclick="SubmitAllOk">It's all OK</button>
+                </div>
+            </div>
+        }
+    </div>
 }
 
 @code {
@@ -270,14 +414,31 @@ else
     private bool _loading = true;
     private bool _canView;
     private bool _isCreator;
+    private bool _isApprover;
     private bool _isAdmin;
     private bool _canEdit;
+    private bool _isSharedWithMe;
+    private bool _isViewOnly;
     private string? _error;
     private bool _busy;
 
     private List<ApprovalStep> _myActionableSteps = new();
     private readonly Dictionary<int, string> _drafts = new();
     private readonly Dictionary<int, string> _resolveDrafts = new();
+
+    private List<SheetSuggestion> _suggestions = new();
+    private string _suggestionDraft = "";
+
+    // Share dialog state.
+    private bool _showSharePanel;
+    private bool _showShareDropdown;
+    private string _shareSearch = "";
+    private string _shareEmailInput = "";
+    private readonly HashSet<string> _selectedShares = new(StringComparer.OrdinalIgnoreCase);
+    private List<ApplicationUser> _shareCandidates = new();
+    private List<ApplicationUser> _shareFiltered = new();
+    private string? _shareError;
+    private string? _shareSuccess;
 
     private string _currentStatus = "Pending";
     private int _epoch;
@@ -327,11 +488,28 @@ else
                                   || _sheet.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed));
         var myEmail = _me.Email ?? "";
         var isApprover = _sheet.ApprovalSteps.Any(s => string.Equals(s.ApproverEmail, myEmail, StringComparison.OrdinalIgnoreCase));
+        var isShared = await db.SheetShares.AnyAsync(s => s.MinuteSheetId == _sheet.Id
+                                                          && s.SharedWithEmail == myEmail);
+        _isApprover = isApprover;
+        _isSharedWithMe = isShared;
+        // Sharing only grants view access, so a shared viewer has no edit/approve/delete rights.
+        _isViewOnly = isShared && !_isCreator && !isApprover && !_isAdmin;
         // Non-confidential sheets are visible to every user. Confidential sheets
-        // are restricted to the creator, listed approvers and admins.
-        _canView = !_sheet.IsConfidential || _isCreator || isApprover || _isAdmin;
+        // are restricted to the creator, listed approvers, admins and anyone the
+        // sheet was explicitly shared with.
+        _canView = !_sheet.IsConfidential || _isCreator || isApprover || _isAdmin || isShared;
 
         _currentStatus = ApprovalWorkflow.StatusFor(_sheet);
+
+        _suggestions = await db.SheetSuggestions
+            .Where(s => s.MinuteSheetId == _sheet.Id)
+            .OrderBy(s => s.CreatedAt)
+            .ToListAsync();
+
+        _shareCandidates = await db.Users
+            .Where(u => u.Email != null)
+            .OrderBy(u => u.Email)
+            .ToListAsync();
 
         // Hierarchical workflow: only the current step's approver can act, and only
         // once every earlier step has been approved.
@@ -347,6 +525,234 @@ else
 
     private string MyName() =>
         _me is null ? "" : (string.IsNullOrWhiteSpace(_me.FullName) ? _me.Email ?? "" : _me.FullName);
+
+    private void OpenShare()
+    {
+        _shareError = null;
+        _shareSuccess = null;
+        _showSharePanel = true;
+    }
+
+    private void CloseShare()
+    {
+        _showSharePanel = false;
+        _shareError = null;
+        _shareSuccess = null;
+    }
+
+    private void OnShareSearch(ChangeEventArgs e)
+    {
+        _shareSearch = e.Value?.ToString() ?? "";
+        FilterShareUsers();
+        _showShareDropdown = true;
+    }
+
+    private void FilterShareUsers()
+    {
+        var q = _shareSearch.Trim();
+        IEnumerable<ApplicationUser> query = _shareCandidates;
+        if (!string.IsNullOrEmpty(q))
+        {
+            query = query.Where(u =>
+                (u.FullName != null && u.FullName.Contains(q, StringComparison.OrdinalIgnoreCase))
+                || (u.Email != null && u.Email.Contains(q, StringComparison.OrdinalIgnoreCase))
+                || (u.EmployeeNo != null && u.EmployeeNo.Contains(q, StringComparison.OrdinalIgnoreCase)));
+        }
+        _shareFiltered = query.Take(10).ToList();
+    }
+
+    private void AddShareUser(string email)
+    {
+        _selectedShares.Add(email);
+        _shareSearch = "";
+        _shareFiltered = new();
+        _showShareDropdown = false;
+        _shareError = null;
+    }
+
+    private async Task HideShareDropdown()
+    {
+        // Wait briefly so the item's @onmousedown (which uses @mousedown, fired
+        // before blur) has already run before we hide the list.
+        await Task.Delay(150);
+        _showShareDropdown = false;
+    }
+
+    private void RemoveShare(string email) => _selectedShares.Remove(email);
+
+    private void AddManualEmail()
+    {
+        var parts = _shareEmailInput.Split(new[] { ',', ';', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+        foreach (var part in parts)
+        {
+            var email = part.Trim();
+            if (email.Contains('@'))
+            {
+                _selectedShares.Add(email);
+            }
+            else if (!string.IsNullOrEmpty(email))
+            {
+                _shareError = "Please enter valid email addresses.";
+            }
+        }
+        _shareEmailInput = "";
+    }
+
+    private async Task SubmitShare()
+    {
+        if (_me is null || _sheet is null)
+        {
+            return;
+        }
+
+        if (_selectedShares.Count == 0)
+        {
+            _shareError = "Select at least one person to share with.";
+            return;
+        }
+
+        _busy = true;
+        _shareError = null;
+        _shareSuccess = null;
+
+        try
+        {
+            var myEmail = _me.Email ?? "";
+            var added = new List<string>();
+            await using (var db = NewDb())
+            {
+                var existing = await db.SheetShares
+                    .Where(s => s.MinuteSheetId == _sheet.Id)
+                    .Select(s => s.SharedWithEmail)
+                    .ToListAsync();
+                var existingSet = new HashSet<string>(existing, StringComparer.OrdinalIgnoreCase);
+
+                foreach (var email in _selectedShares)
+                {
+                    if (string.Equals(email, myEmail, StringComparison.OrdinalIgnoreCase))
+                    {
+                        continue;
+                    }
+                    if (existingSet.Contains(email))
+                    {
+                        continue;
+                    }
+
+                    db.SheetShares.Add(new SheetShare
+                    {
+                        MinuteSheetId = _sheet.Id,
+                        SharedByUserId = _me.Id,
+                        SharedWithEmail = email
+                    });
+                    existingSet.Add(email);
+                    added.Add(email);
+                }
+
+                await db.SaveChangesAsync();
+            }
+
+            // Build a PDF copy of the sheet (once) so recipients can view it from
+            // the email even without opening a link.
+            byte[]? pdfBytes = null;
+            if (added.Count > 0)
+            {
+                var creatorName = string.IsNullOrWhiteSpace(_sheet.CreatedByUser?.FullName)
+                    ? _sheet.CreatedByUser?.Email ?? ""
+                    : _sheet.CreatedByUser!.FullName;
+                pdfBytes = PdfService.Build(_sheet, creatorName);
+            }
+
+            foreach (var email in added)
+            {
+                EmailQueue.Enqueue(new EmailJob(
+                    email,
+                    "A minute sheet was shared with you",
+                    $"{MyName()} shared a minute sheet with you. A PDF copy is attached to this email and you can also open it from the link below.",
+                    NavigationManager.ToAbsoluteUri($"dashboard/sheet/{Token}").AbsoluteUri,
+                    pdfBytes,
+                    $"minute-sheet-{Token:N}.pdf"));
+            }
+
+            _shareSuccess = added.Count > 0
+                ? $"Shared view access with: {string.Join(", ", added)}"
+                : "Those people already have view access to this sheet.";
+            _selectedShares.Clear();
+            _shareEmailInput = "";
+            _shareSearch = "";
+            _shareFiltered = new();
+            _showShareDropdown = false;
+
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            _shareError = $"Something went wrong: {ex.Message}";
+        }
+        finally
+        {
+            _busy = false;
+        }
+    }
+
+    private async Task SubmitSuggestion()
+    {
+        if (_me is null || _sheet is null)
+        {
+            return;
+        }
+
+        var body = _suggestionDraft.Trim();
+        if (body.Length == 0)
+        {
+            _error = "Please write what you'd like to add or change.";
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        await using (var db = NewDb())
+        {
+            db.SheetSuggestions.Add(new SheetSuggestion
+            {
+                MinuteSheetId = _sheet.Id,
+                AuthorUserId = _me.Id,
+                AuthorName = MyName(),
+                IsAllOk = false,
+                Body = body
+            });
+            await db.SaveChangesAsync();
+        }
+
+        _suggestionDraft = "";
+        await LoadAsync();
+        _busy = false;
+    }
+
+    private async Task SubmitAllOk()
+    {
+        if (_me is null || _sheet is null)
+        {
+            return;
+        }
+
+        _busy = true;
+        _error = null;
+        await using (var db = NewDb())
+        {
+            db.SheetSuggestions.Add(new SheetSuggestion
+            {
+                MinuteSheetId = _sheet.Id,
+                AuthorUserId = _me.Id,
+                AuthorName = MyName(),
+                IsAllOk = true,
+                Body = ""
+            });
+            await db.SaveChangesAsync();
+        }
+
+        await LoadAsync();
+        _busy = false;
+    }
 
     private async Task MarkReviewed(int stepId)
     {

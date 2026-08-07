@@ -56,13 +56,14 @@ else
         }
         else
         {
-            <div class="act-head" style="grid-template-columns:1.3fr 1.3fr 1fr 1fr 90px;">
-                <div>Date</div><div>From</div><div>Category</div><div>Your status</div><div></div>
+            <div class="act-head" style="grid-template-columns:1.5fr 1.3fr 1.3fr 1fr 1fr 90px;">
+                <div>Title</div><div>Date</div><div>From</div><div>Category</div><div>Your status</div><div></div>
             </div>
             @foreach (var step in _pending)
             {
                 var sheet = step.MinuteSheet!;
-                <div class="act-row" style="grid-template-columns:1.3fr 1.3fr 1fr 1fr 90px;">
+                <div class="act-row" style="grid-template-columns:1.5fr 1.3fr 1.3fr 1fr 1fr 90px;">
+                    <div style="font-weight:600;color:var(--ink-strong);">@sheet.Title</div>
                     <div>@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
                     <div>
                         <div class="act-user">
@@ -86,16 +87,42 @@ else
         }
         else
         {
-            <div class="act-head" style="grid-template-columns:1.5fr 1fr 1fr 90px;">
-                <div>Date</div><div>Category</div><div>Reviews to resolve</div><div></div>
+            <div class="act-head" style="grid-template-columns:1.5fr 1.5fr 1fr 1fr 90px;">
+                <div>Title</div><div>Date</div><div>Category</div><div>Reviews to resolve</div><div></div>
             </div>
             @foreach (var sheet in _toResolve)
             {
                 var count = sheet.ApprovalSteps.Count(s => s.Status == ApprovalStepStatus.Reviewed);
-                <div class="act-row" style="grid-template-columns:1.5fr 1fr 1fr 90px;">
+                <div class="act-row" style="grid-template-columns:1.5fr 1.5fr 1fr 1fr 90px;">
+                    <div style="font-weight:600;color:var(--ink-strong);">@sheet.Title</div>
                     <div>@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
                     <div style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
                     <div><span class="badge bg-warning">@count</span></div>
+                    <div><a class="btn btn-sm btn-primary" href="dashboard/sheet/@sheet.Token">Open</a></div>
+                </div>
+            }
+        }
+    </div>
+
+    <div class="act-section">Shared with me</div>
+    <div class="act-card">
+        @if (_shared.Count == 0)
+        {
+            <div class="act-empty">Nothing has been shared with you.</div>
+        }
+        else
+        {
+            <div class="act-head" style="grid-template-columns:1.3fr 1.3fr 1fr 1fr 90px;">
+                <div>Shared</div><div>From</div><div>Category</div><div>Visibility</div><div></div>
+            </div>
+            @foreach (var share in _shared)
+            {
+                var sheet = share.MinuteSheet!;
+                <div class="act-row" style="grid-template-columns:1.3fr 1.3fr 1fr 1fr 90px;">
+                    <div>@share.SharedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
+                    <div style="color:#565b78;">@SharerName(share)</div>
+                    <div style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
+                    <div><span class="badge @(sheet.IsConfidential ? "bg-danger" : "bg-secondary")">@(sheet.IsConfidential ? "Confidential" : "Non-confidential")</span></div>
                     <div><a class="btn btn-sm btn-primary" href="dashboard/sheet/@sheet.Token">Open</a></div>
                 </div>
             }
@@ -107,6 +134,7 @@ else
     private bool _loading = true;
     private List<ApprovalStep> _pending = new();
     private List<MinuteSheet> _toResolve = new();
+    private List<SheetShare> _shared = new();
 
     protected override async Task OnInitializedAsync()
     {
@@ -138,8 +166,20 @@ else
             .OrderByDescending(m => m.CreatedAt)
             .ToListAsync();
 
+        _shared = await DbContext.SheetShares
+            .Where(s => s.SharedWithEmail == myEmail)
+            .Include(s => s.MinuteSheet!).ThenInclude(m => m.CreatedByUser)
+            .Include(s => s.SharedByUser)
+            .OrderByDescending(s => s.SharedAt)
+            .ToListAsync();
+
         _loading = false;
     }
+
+    private static string SharerName(SheetShare share) =>
+        share.SharedByUser is null
+            ? "—"
+            : (string.IsNullOrWhiteSpace(share.SharedByUser.FullName) ? share.SharedByUser.Email ?? "—" : share.SharedByUser.FullName);
 
     private static string CreatorName(MinuteSheet sheet) =>
         sheet.CreatedByUser is null
