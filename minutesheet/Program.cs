@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Mvc;
 using minutesheet.Components;
 using minutesheet.Components.Account;
 using minutesheet.Data;
@@ -34,7 +35,44 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-builder.Services.Configure<EmailSettings>(builder.Configuration.GetSection("EmailSettings"));
+builder.Services.Configure<EmailSettings>(options =>
+{
+    builder.Configuration.GetSection("EmailSettings").Bind(options);
+
+    var envPassword = Environment.GetEnvironmentVariable("GOOGLE_APP_PASSWORD")
+        ?? Environment.GetEnvironmentVariable("GMAIL_APP_PASSWORD")
+        ?? Environment.GetEnvironmentVariable("EMAIL_PASSWORD")
+        ?? Environment.GetEnvironmentVariable("EmailSettings__Password")
+        ?? Environment.GetEnvironmentVariable("EmailSettings:Password");
+
+    if (!string.IsNullOrWhiteSpace(envPassword))
+    {
+        options.Password = envPassword;
+    }
+
+    var envUser = Environment.GetEnvironmentVariable("GOOGLE_APP_USER")
+        ?? Environment.GetEnvironmentVariable("GMAIL_APP_USER")
+        ?? Environment.GetEnvironmentVariable("EMAIL_USER")
+        ?? Environment.GetEnvironmentVariable("EmailSettings__User")
+        ?? Environment.GetEnvironmentVariable("EmailSettings:User");
+
+    if (!string.IsNullOrWhiteSpace(envUser))
+    {
+        options.User = envUser;
+        if (string.IsNullOrWhiteSpace(options.From))
+        {
+            options.From = envUser;
+        }
+    }
+
+    var envHost = Environment.GetEnvironmentVariable("EMAIL_HOST")
+        ?? Environment.GetEnvironmentVariable("EmailSettings__Host");
+
+    if (!string.IsNullOrWhiteSpace(envHost))
+    {
+        options.Host = envHost;
+    }
+});
 builder.Services.AddHttpClient();
 builder.Services.AddSingleton<SmtpEmailSender>();
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>>(sp => sp.GetRequiredService<SmtpEmailSender>());
@@ -44,6 +82,7 @@ builder.Services.AddSingleton<EmailQueue>();
 builder.Services.AddHostedService<EmailBackgroundService>();
 
 builder.Services.AddScoped<minutesheet.Services.DocumentSummarizationService>();
+builder.Services.AddScoped<minutesheet.Services.SpeechTranscriptionService>();
 builder.Services.AddSingleton<minutesheet.Services.SheetPdfService>();
 builder.Services.AddScoped<minutesheet.Services.ToastService>();
 
@@ -74,6 +113,31 @@ app.UseHttpsRedirection();
 
 app.UseStaticFiles();
 app.UseAntiforgery();
+
+app.MapPost("/api/transcriptions", async (
+    IFormFile audio,
+    [FromForm] string language,
+    minutesheet.Services.SpeechTranscriptionService transcriptionService,
+    CancellationToken cancellationToken) =>
+{
+    try
+    {
+        var text = await transcriptionService.TranscribeAsync(audio, language, cancellationToken);
+        return Results.Ok(new { text });
+    }
+    catch (ArgumentException exception)
+    {
+        return Results.BadRequest(new { error = exception.Message });
+    }
+    catch (InvalidOperationException exception)
+    {
+        return Results.Problem(exception.Message, statusCode: StatusCodes.Status503ServiceUnavailable);
+    }
+    catch (HttpRequestException exception)
+    {
+        return Results.Problem(exception.Message, statusCode: StatusCodes.Status502BadGateway);
+    }
+}).RequireAuthorization().DisableAntiforgery();
 
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode();
