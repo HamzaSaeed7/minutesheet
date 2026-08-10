@@ -57,6 +57,7 @@ public sealed class SpeechTranscriptionService
                 RedirectStandardOutput = true,
                 CreateNoWindow = true
             };
+            startInfo.Environment["PYTHONIOENCODING"] = "utf-8";
             startInfo.ArgumentList.Add(inputPath);
             startInfo.ArgumentList.Add("--model");
             startInfo.ArgumentList.Add(model);

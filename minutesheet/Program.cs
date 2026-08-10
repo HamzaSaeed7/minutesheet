@@ -118,11 +118,18 @@ app.MapPost("/api/transcriptions", async (
     IFormFile audio,
     [FromForm] string language,
     minutesheet.Services.SpeechTranscriptionService transcriptionService,
+    minutesheet.Services.DocumentSummarizationService summarizationService,
     CancellationToken cancellationToken) =>
 {
     try
     {
         var text = await transcriptionService.TranscribeAsync(audio, language, cancellationToken);
+        
+        if (language == "ur-PK" && !string.IsNullOrWhiteSpace(text))
+        {
+            text = await summarizationService.TranslateUrduToEnglishAsync(text);
+        }
+        
         return Results.Ok(new { text });
     }
     catch (ArgumentException exception)
