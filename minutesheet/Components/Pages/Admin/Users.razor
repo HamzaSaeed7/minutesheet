@@ -1,6 +1,7 @@
 @page "/admin/users"
 @rendermode InteractiveServer
 
+@using System.ComponentModel.DataAnnotations
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Identity
@@ -13,91 +14,242 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject minutesheet.Services.ToastService ToastService
 @inject IJSRuntime JS
+@inject ApplicationDbContext DbContext
 
 <PageTitle>Manage Users</PageTitle>
 
 <ToastHost />
 
-<div class="d-flex align-items-center justify-content-between mb-3">
-    <h1 class="page-title mb-0">Manage Users</h1>
+<div class="d-flex align-items-center justify-content-between flex-wrap gap-3 mb-3">
+    <div>
+        <h1 class="page-title mb-1">Manage Users</h1>
+        <p class="as-subtitle">Browse, search and manage employee accounts and roles.</p>
+    </div>
     <a class="btn btn-primary" href="admin/users/create">+ Add User</a>
 </div>
 
-<div class="content-card" style="max-width:none">
-    @if (_rows is null)
-    {
-        <p>Loading...</p>
-    }
-    else if (_rows.Count == 0)
-    {
-        <p class="text-muted mb-0">No users found.</p>
-    }
-    else
-    {
-        <table class="table table-hover align-middle">
-            <thead>
-                <tr>
-                    <th>Name</th>
-                    <th>Email</th>
-                    <th>Employee No.</th>
-                    <th>Role</th>
-                    <th class="text-end">Action</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var row in _rows)
-                {
-                    <tr>
-                        <td>@(string.IsNullOrWhiteSpace(row.User.FullName) ? "—" : row.User.FullName)</td>
-                        <td>@row.User.Email</td>
-                        <td>@(string.IsNullOrWhiteSpace(row.User.EmployeeNo) ? "—" : row.User.EmployeeNo)</td>
-                        <td>
-                            <span class="badge @(row.IsAdmin ? "bg-primary" : "bg-secondary")">
-                                @(row.IsAdmin ? Roles.Admin : Roles.Employee)
-                            </span>
-                        </td>
-                        <td class="text-end">
-                            <div class="d-inline-flex align-items-center gap-2">
-                                <a class="btn btn-sm btn-outline-secondary" href="@($"admin/users/{row.User.Id}/edit")">Edit</a>
-                                @if (row.IsSelf)
-                                {
-                                    <span class="text-muted" style="font-size:12.5px;">You</span>
-                                }
-                                else
-                                {
-                                    @if (row.IsAdmin)
-                                    {
-                                        <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_busy"
-                                                @onclick="() => SetRole(row, makeAdmin: false)">
-                                            Make Employee
-                                        </button>
-                                    }
-                                    else
-                                    {
-                                        <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_busy"
-                                                @onclick="() => SetRole(row, makeAdmin: true)">
-                                            Make Admin
-                                        </button>
-                                    }
+@if (_rows is null)
+{
+    <div class="content-card">
+        <p class="text-muted mb-0">Loading...</p>
+    </div>
+}
+else
+{
+    <div class="as-stats">
+        <div class="as-stat">
+            <span class="as-stat-icon bg-brand">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path><circle cx="9" cy="7" r="4"></circle><path d="M22 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"></path></svg>
+            </span>
+            <span>
+                <div class="as-stat-label">Total users</div>
+                <div class="as-stat-value">@_rows.Count</div>
+            </span>
+        </div>
+        <div class="as-stat">
+            <span class="as-stat-icon bg-info">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"></path></svg>
+            </span>
+            <span>
+                <div class="as-stat-label">Admins</div>
+                <div class="as-stat-value">@_rows.Count(r => r.IsAdmin)</div>
+            </span>
+        </div>
+        <div class="as-stat">
+            <span class="as-stat-icon bg-ok">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="7" width="20" height="14" rx="2"></rect><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"></path></svg>
+            </span>
+            <span>
+                <div class="as-stat-label">Employees</div>
+                <div class="as-stat-value">@_rows.Count(r => !r.IsAdmin)</div>
+            </span>
+        </div>
+        <div class="as-stat">
+            <span class="as-stat-icon bg-wait">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 17h6M9 12h6M17 16h6"></path></svg>
+            </span>
+            <span>
+                <div class="as-stat-label">Departments</div>
+                <div class="as-stat-value">@_departments.Count</div>
+            </span>
+        </div>
+    </div>
 
-                                    <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_busy"
-                                            @onclick="() => DeleteUserAsync(row)">
-                                        Delete
-                                    </button>
-                                }
-                            </div>
-                        </td>
-                    </tr>
+    <div class="content-card history-card">
+        @if (_rows.Count == 0)
+        {
+            <div class="history-empty">
+                <div class="history-empty-icon">
+                    <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="9" cy="7" r="4"></circle><path d="M2 21v-2a4 4 0 0 1 4-4h6a4 4 0 0 1 4 4v2"></path></svg>
+                </div>
+                <p class="history-empty-text">No users found.</p>
+            </div>
+        }
+        else
+        {
+            <div class="history-toolbar as-toolbar">
+                <div class="as-toolbar-search">
+                    <div class="ht-search">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                        <input type="text" placeholder="Search by name, email or employee no..." @bind="_search" @bind:event="oninput" @bind:after="ResetFiltersPage" />
+                    </div>
+                    <button type="button" class="ht-clear" @onclick="ClearFilters"
+                            disabled="@(_search.Length == 0 && _roleFilter.Length == 0 &&
+                                       _departmentFilter.Length == 0 && _designationFilter.Length == 0)">Clear</button>
+                </div>
+                <div class="as-filter-row">
+                    <select class="ht-select" @bind="_roleFilter" @bind:after="ResetFiltersPage">
+                        <option value="">All roles</option>
+                        <option value="@Roles.Admin">Admins</option>
+                        <option value="@Roles.Employee">Employees</option>
+                    </select>
+                    <select class="ht-select" @bind="_departmentFilter" @bind:after="ResetFiltersPage">
+                        <option value="">All departments</option>
+                        @foreach (var dept in _departments)
+                        {
+                            <option value="@dept.Id">@dept.Name</option>
+                        }
+                    </select>
+                    <select class="ht-select" @bind="_designationFilter" @bind:after="ResetFiltersPage">
+                        <option value="">All designations</option>
+                        @foreach (var d in Enum.GetValues<Designation>())
+                        {
+                            <option value="@d">@DesignationName(d)</option>
+                        }
+                    </select>
+                </div>
+            </div>
+
+            @if (_filteredRows.Count == 0)
+            {
+                <div class="history-empty">
+                    <div class="history-empty-icon">
+                        <svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
+                    </div>
+                    <p class="history-empty-text">No users match your search or filters.</p>
+                </div>
+            }
+            else
+            {
+                <div class="as-table-wrap">
+                    <table class="table table-hover align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>User</th>
+                                <th>Employee No.</th>
+                                <th>Designation</th>
+                                <th>Department</th>
+                                <th>Role</th>
+                                <th class="text-end">Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var row in _pagedRows)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="avatar-wrap">
+                                            <span class="avatar-mini">@Initials(DisplayName(row))</span>
+                                            <span>
+                                                <div class="as-user-name">@DisplayName(row)</div>
+                                                <div class="avatar-mail">@row.User.Email</div>
+                                            </span>
+                                        </div>
+                                    </td>
+                                    <td>
+                                        <span class="as-mono">@(string.IsNullOrWhiteSpace(row.User.EmployeeNo) ? "—" : row.User.EmployeeNo)</span>
+                                    </td>
+                                    <td>
+                                        <span class="as-text-muted">@DesignationName(row.User.Designation)</span>
+                                    </td>
+                                    <td>
+                                        <span class="as-text">@(row.User.Department?.Name ?? "—")</span>
+                                    </td>
+                                    <td>
+                                        <span class="role-chip @(row.IsAdmin ? "role-admin" : "role-employee")">
+                                            @(row.IsAdmin ? Roles.Admin : Roles.Employee)
+                                        </span>
+                                    </td>
+                                    <td class="text-end">
+                                        <div class="d-inline-flex align-items-center gap-2">
+                                            <a class="btn btn-sm btn-outline-secondary" href="@($"admin/users/{row.User.Id}/edit")">Edit</a>
+                                            @if (row.IsSelf)
+                                            {
+                                                <span class="text-muted" style="font-size:12.5px;" title="This is your own account">You</span>
+                                            }
+                                            else
+                                            {
+                                                @if (row.IsAdmin)
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_busy"
+                                                            @onclick="() => SetRole(row, makeAdmin: false)">
+                                                        Make Employee
+                                                    </button>
+                                                }
+                                                else
+                                                {
+                                                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_busy"
+                                                            @onclick="() => SetRole(row, makeAdmin: true)">
+                                                        Make Admin
+                                                    </button>
+                                                }
+
+                                                <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_busy"
+                                                        @onclick="() => DeleteUserAsync(row)">
+                                                    Delete
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+
+                @if (_filteredRows.Count > _pageSize)
+                {
+                    <div class="history-pagination as-pagination">
+                        <span class="pgn-count">Showing @ShownStart–@ShownEnd of @_filteredRows.Count</span>
+                        <button type="button" class="pgn-btn" disabled="@(_pageIndex == 0)" @onclick="() => GoToPage(_pageIndex - 1)">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"></path></svg>
+                            <span>Prev</span>
+                        </button>
+                        <div class="pgn-pages">
+                            @foreach (var p in PageNumbers)
+                            {
+                                <button type="button" class="pgn-num @(p == _pageIndex ? "active" : "")" @onclick="() => GoToPage(p)">@(p + 1)</button>
+                            }
+                        </div>
+                        <button type="button" class="pgn-btn" disabled="@(_pageIndex >= TotalPages - 1)" @onclick="() => GoToPage(_pageIndex + 1)">
+                            <span>Next</span>
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 18l6-6-6-6"></path></svg>
+                        </button>
+                        <span class="as-perpage">Rows
+                            <select class="ht-select" @bind="_pageSize" @bind:after="ResetFiltersPage">
+                                <option value="10">10</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                            </select>
+                        </span>
+                    </div>
                 }
-            </tbody>
-        </table>
-    }
-</div>
+            }
+        }
+    </div>
+}
 
 @code {
     private List<UserRow>? _rows;
+    private List<Department> _departments = new();
     private string? _currentUserId;
     private bool _busy;
+    private int _pageIndex;
+    private int _pageSize = 10;
+    private string _search = "";
+    private string _roleFilter = "";
+    private string _departmentFilter = "";
+    private string _designationFilter = "";
 
     private sealed class UserRow
     {
@@ -105,6 +257,19 @@
         public bool IsAdmin { get; set; }
         public bool IsSelf { get; set; }
     }
+
+    private List<UserRow> _filteredRows =>
+        _rows?.Where(MatchesFilters).ToList() ?? new();
+
+    private int TotalPages => _filteredRows is { Count: > 0 }
+        ? (int)Math.Ceiling(_filteredRows.Count / (double)_pageSize)
+        : 1;
+
+    private IEnumerable<UserRow> _pagedRows =>
+        _filteredRows.Skip(_pageIndex * _pageSize).Take(_pageSize).ToList();
+
+    private int ShownStart => _filteredRows.Count > 0 ? _pageIndex * _pageSize + 1 : 0;
+    private int ShownEnd => Math.Min((_pageIndex + 1) * _pageSize, _filteredRows.Count);
 
     protected override async Task OnInitializedAsync()
     {
@@ -115,7 +280,13 @@
 
     private async Task LoadAsync()
     {
-        var users = await UserManager.Users.OrderBy(u => u.FullName).ToListAsync();
+        _departments = await DbContext.Departments.OrderBy(d => d.Name).ToListAsync();
+
+        var users = await UserManager.Users
+            .Include(u => u.Department)
+            .OrderBy(u => u.FullName)
+            .ToListAsync();
+
         var rows = new List<UserRow>();
         foreach (var user in users)
         {
@@ -127,6 +298,92 @@
             });
         }
         _rows = rows;
+        _pageIndex = 0;
+    }
+
+    private bool MatchesFilters(UserRow row)
+    {
+        if (_roleFilter.Length > 0)
+        {
+            var role = row.IsAdmin ? Roles.Admin : Roles.Employee;
+            if (role != _roleFilter) return false;
+        }
+
+        if (_departmentFilter.Length > 0
+            && row.User.DepartmentId?.ToString() != _departmentFilter)
+            return false;
+
+        if (_designationFilter.Length > 0
+            && row.User.Designation.ToString() != _designationFilter)
+            return false;
+
+        var term = _search.Trim();
+        if (term.Length > 0)
+        {
+            var haystack = string.Join(" ", new[]
+            {
+                row.User.FullName,
+                row.User.Email ?? "",
+                row.User.EmployeeNo,
+                DesignationName(row.User.Designation),
+                row.User.Department?.Name ?? ""
+            });
+            if (!haystack.Contains(term, StringComparison.OrdinalIgnoreCase)) return false;
+        }
+
+        return true;
+    }
+
+    private static string DisplayName(UserRow row) =>
+        string.IsNullOrWhiteSpace(row.User.FullName) ? row.User.Email ?? "—" : row.User.FullName;
+
+    private static string DesignationName(Designation d)
+    {
+        var member = typeof(Designation).GetMember(d.ToString()).FirstOrDefault();
+        var attr = member?.GetCustomAttributes(typeof(DisplayAttribute), false).FirstOrDefault() as DisplayAttribute;
+        return attr?.Name ?? d.ToString();
+    }
+
+    private static string Initials(string name)
+    {
+        if (string.IsNullOrWhiteSpace(name) || name == "—") return "?";
+
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var initials = parts.Length >= 2
+            ? $"{parts[0][0]}{parts[^1][0]}"
+            : parts[0][..Math.Min(2, parts[0].Length)];
+
+        return initials.ToUpperInvariant();
+    }
+
+    private void ResetFiltersPage() => _pageIndex = 0;
+
+    private void ClearFilters()
+    {
+        _search = "";
+        _roleFilter = "";
+        _departmentFilter = "";
+        _designationFilter = "";
+        _pageIndex = 0;
+    }
+
+    private IEnumerable<int> PageNumbers
+    {
+        get
+        {
+            var pages = TotalPages;
+            var current = _pageIndex;
+            var start = Math.Max(0, current - 1);
+            var end = Math.Min(pages - 1, start + 4);
+            start = Math.Max(0, end - 4);
+            for (var i = start; i <= end; i++) yield return i;
+        }
+    }
+
+    private void GoToPage(int page)
+    {
+        if (page < 0 || page >= TotalPages) return;
+        _pageIndex = page;
     }
 
     private async Task SetRole(UserRow row, bool makeAdmin)
