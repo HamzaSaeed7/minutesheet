@@ -89,7 +89,7 @@ else
         <div class="content-card">
             <div class="card-eyebrow" style="margin-bottom:10px;">Attachment</div>
             <div class="dropzone">
-                <InputFile class="dropzone-file" OnChange="OnFileSelected" accept=".pdf,.doc,.docx" />
+                <InputFile class="dropzone-file" OnChange="OnFileSelected" />
                 @if (_selectedFile is null && _isEdit && !string.IsNullOrEmpty(_existingAttachmentName))
                 {
                     <div class="dropzone-text">
@@ -100,7 +100,7 @@ else
                 else if (_selectedFile is null)
                 {
                     <div class="dropzone-text">
-                        PDF or Word (.doc / .docx), up to 10&nbsp;MB<br />
+                        Any file type, up to 10&nbsp;MB<br />
                         <span class="dropzone-link">Click to browse</span> or drag a file here
                     </div>
                 }
@@ -379,7 +379,6 @@ else
     private ElementReference _agendaEditRef;
 
     private const int MaxApprovals = 20;
-    private static readonly string[] AllowedExtensions = { ".pdf", ".doc", ".docx" };
     private const long MaxFileSize = 10 * 1024 * 1024; // 10 MB
 
     protected override async Task OnInitializedAsync()
@@ -524,13 +523,6 @@ else
     {
         _error = null;
         var file = e.File;
-        var ext = Path.GetExtension(file.Name).ToLowerInvariant();
-        if (!AllowedExtensions.Contains(ext))
-        {
-            ToastService.ShowError("Only PDF and Word (.doc/.docx) files are allowed.", "Unsupported file");
-            _selectedFile = null;
-            return;
-        }
         if (file.Size > MaxFileSize)
         {
             ToastService.ShowError("File exceeds the 10 MB limit.", "File too large");
@@ -863,6 +855,24 @@ else
             var descriptionHtml = await JS.InvokeAsync<string>("quillInterop.getHtml", "editor");
             var plainText = System.Text.RegularExpressions.Regex.Replace(descriptionHtml ?? "", "<.*?>", string.Empty).Trim();
 
+            IBrowserFile? aiFile = _selectedFile;
+            if (aiFile != null)
+            {
+                var ext = Path.GetExtension(aiFile.Name).ToLowerInvariant();
+                string[] imageExtensions = { ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg" };
+                
+                if (imageExtensions.Contains(ext))
+                {
+                    ToastService.ShowWarning("Image attachments are ignored for AI Insights; generating based on form data only.", "Image Ignored");
+                    aiFile = null;
+                }
+                else if (ext != ".pdf" && ext != ".doc" && ext != ".docx")
+                {
+                    ToastService.ShowWarning("Only PDF and Word attachments are processed for AI Insights. Generating based on form data only.", "Unsupported File");
+                    aiFile = null;
+                }
+            }
+
             // Start tasks in parallel
             var summaryTask = SummarizationService.GenerateSummaryAsync(
                 _category.ToString(), 
@@ -871,7 +881,7 @@ else
                 creatorDepartment, 
                 creatorEmpNo, 
                 descriptionHtml, 
-                _selectedFile);
+                aiFile);
             var actionItemsTask = SummarizationService.ExtractActionItemsAsync(plainText);
             var agendaTask = SummarizationService.GenerateAgendaAsync(plainText);
 

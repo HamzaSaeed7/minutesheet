@@ -1,6 +1,6 @@
 # Minute Sheet
 
-An internal tool for creating **minute sheets** and routing them through a dynamic, multi-step **approval workflow**. Built as a .NET 8 **Blazor Web App** (Interactive Server) with ASP.NET Core Identity, it provides branded sign-up/login with real email OTP verification, a dashboard for authoring minute sheets (rich text + attachments), a configurable approver chain with a review/resolve loop, and per-user history.
+An internal tool for creating **minute sheets** and routing them through a dynamic, multi-step **approval workflow**. Built as a .NET 8 **Blazor Web App** (Interactive Server) with ASP.NET Core Identity, it provides branded sign-up/login with real email OTP verification, a dashboard for authoring minute sheets (rich text + attachments + audio dictation), a configurable approver chain with a review/resolve loop, and per-user history.
 
 Brand: `#000066` · Poppins.
 
@@ -16,29 +16,28 @@ Brand: `#000066` · Poppins.
 
 - **Minute sheets** (`/dashboard/create`)
   - Category: **Financial / Non-Financial**.
+  - **Confidentiality:** Toggle between **Non-Confidential** (viewable by all) and **Confidential** (viewable only by creator, approvers, and admins).
   - **Rich-text description** via a self-hosted **Quill** editor.
+  - **Audio Dictation:** Real-time speech-to-text using local Whisper CLI integration (supports English and Urdu), with Urdu-to-English translation capabilities.
   - **Attachment** upload (`.pdf`, `.doc`, `.docx`, up to 10 MB), stored under `wwwroot/uploads/`.
-  - **Dynamic approval workflow** — add/remove rows, set each step to **Review** or **Approve**, pick an approver; the **final step is always Approve**. A numeric input sets the total number of rows.
+  - **Dynamic approval workflow** — add/remove rows, set each step to **Review** or **Approve**, pick an approver; the **final step is always Approve**. 
 
 - **Approval flow** (`/dashboard/sheet/{token}`)
   - Each approver gets an emailed link to review or approve.
   - **Review** requires a comment; **Approve** does not.
-  - **Review → Resolve loop:** a reviewed step returns to the creator, who resolves it (sending it back to the approver) and can make a **limited edit** to the description/attachment while approvals are in progress.
+  - **Review → Resolve loop:** a reviewed step returns to the creator, who resolves it and can make a **limited edit** to the description/attachment while approvals are in progress.
   - A sheet is **Approved** only when every step is approved.
-
-- **Creator controls**
-  - **Edit** a sheet — full edit while all steps are pending; description/attachment-only edit once reviews are in progress (workflow locked).
-  - **Delete** a sheet (with confirmation) from the sheet view or history.
 
 - **History & Actions**
   - `/dashboard/history` — the user's own sheets, with status, approval progress, and edit/delete/open actions.
   - `/dashboard/actions` — items **pending your approval** and **reviews to resolve**.
 
-- **AI Summary Generation**
+- **AI Document Summarization & Extraction**
   - **Document Transcribing:** Automatically extracts textual content from attached PDF (`PdfPig`) and Word (`DocumentFormat.OpenXml`) files.
-  - **Smart Summaries:** Connects to the OpenRouter AI API to generate professional summaries based on the sheet's description and transcribed attachment content.
+  - **Smart Summaries & Extraction:** Connects to the OpenRouter AI API (`google/gemma-4-26b-a4b-it:free`) to generate professional **Summaries**, **Action Items**, and **Agendas** based on the sheet's description and transcribed attachment content.
+  - **Translation:** Translates Urdu transcriptions to English.
 
-- **Email delivery** — prefers the **Brevo HTTP API** (HTTPS/443, rarely blocked); falls back to **SMTP** (MailKit) when only SMTP settings are provided. Mail failures never break signup or a workflow action.
+- **Email delivery** — prefers the **Brevo HTTP API** (HTTPS/443, rarely blocked); falls back to **SMTP** (MailKit) when only SMTP settings are provided. 
 
 ---
 
@@ -51,7 +50,9 @@ Brand: `#000066` · Poppins.
 | Data        | Entity Framework Core + SQL Server LocalDB |
 | Email       | Brevo HTTP API or SMTP via MailKit |
 | Rich text   | Quill (self-hosted under `wwwroot/lib/quill`) |
-| Summaries   | OpenRouter API + PdfPig/DocumentFormat.OpenXml for text extraction |
+| AI / LLM    | OpenRouter API (`google/gemma-4-26b-a4b-it:free`) |
+| Dictation   | Local Whisper CLI via Python + `ffmpeg` |
+| Text Extract| PdfPig & DocumentFormat.OpenXml for text extraction |
 | 2FA QR      | QRCoder |
 | UI          | Bootstrap + custom CSS (`wwwroot/app.css`), Poppins |
 
@@ -62,8 +63,10 @@ Brand: `#000066` · Poppins.
 ### Prerequisites
 
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) (targets `net8.0`)
-- SQL Server **LocalDB** (included with Visual Studio or via [SqlLocalDB](https://learn.microsoft.com/sql/database-engine/configure-windows/sql-server-express-localdb))
-- Optional: [`dotnet-ef`](https://learn.microsoft.com/ef/core/cli/dotnet) for CLI migrations (`dotnet tool install --global dotnet-ef`)
+- SQL Server **LocalDB** (included with Visual Studio or via SqlLocalDB)
+- **Python** and **ffmpeg** (for Audio Dictation)
+- Whisper CLI: `pip install -U openai-whisper setuptools-rust`
+- Optional: `dotnet-ef` for CLI migrations (`dotnet tool install --global dotnet-ef`)
 
 ### 1. Clone
 
@@ -74,7 +77,7 @@ cd minutesheet
 
 ### 2. Configure the database
 
-The default connection string points at LocalDB and is set in [`minutesheet/appsettings.json`](minutesheet/appsettings.json):
+The default connection string points at LocalDB in `minutesheet/appsettings.json`:
 
 ```
 Server=(localdb)\mssqllocaldb;Database=aspnet-minutesheet-...;Trusted_Connection=True;MultipleActiveResultSets=true
@@ -86,41 +89,42 @@ Apply the EF Core migrations to create the schema (and seed departments):
 dotnet ef database update --project minutesheet
 ```
 
-> No `dotnet-ef`? The app also runs the migrations endpoint in Development, so you can apply pending migrations from the error page on first run.
-
 ### 3. Configure secrets (email and API keys)
 
-`appsettings.json` ships with **empty** placeholders — **never commit real credentials**. Provide them via [user-secrets](https://learn.microsoft.com/aspnet/core/security/app-secrets) instead. A `UserSecretsId` is already set on the project.
+`appsettings.json` ships with **empty** placeholders — **never commit real credentials**. Provide them via user-secrets instead.
 
-**OpenRouter AI Summarization (Required for Summaries):**
-
-To enable AI summaries and transcription of attachments, provide an OpenRouter API key:
-
+**OpenRouter AI Settings (Required for AI Summaries, Actions, Agendas, Translation):**
+The system expects 4 separate API keys for different tasks (you can use the same key for all 4).
 ```bash
 cd minutesheet
-dotnet user-secrets set "OpenRouterSettings:ApiKey" "sk-or-v1-your-key"
+dotnet user-secrets set "OpenRouterSettings:ApiKeys:0" "your-openrouter-key-for-summary"
+dotnet user-secrets set "OpenRouterSettings:ApiKeys:1" "your-openrouter-key-for-action-items"
+dotnet user-secrets set "OpenRouterSettings:ApiKeys:2" "your-openrouter-key-for-agenda"
+dotnet user-secrets set "OpenRouterSettings:ApiKeys:3" "your-openrouter-key-for-translation"
+```
+
+**Local Whisper Model:**
+In `appsettings.json`, set the whisper model (defaults to `base`):
+```json
+"LocalWhisper": {
+  "Model": "base"
+}
 ```
 
 **Email Option A — Brevo HTTP API (recommended):**
-
 ```bash
-cd minutesheet
 dotnet user-secrets set "EmailSettings:ApiKey" "xkeysib-your-key"
 dotnet user-secrets set "EmailSettings:From" "verified-sender@yourdomain.com"
 ```
 
-**Option B — SMTP (e.g. Gmail app password / SendGrid):**
-
+**Email Option B — SMTP (e.g. Gmail app password / SendGrid):**
 ```bash
-cd minutesheet
 dotnet user-secrets set "EmailSettings:Host" "smtp.example.com"
 dotnet user-secrets set "EmailSettings:Port" "587"
 dotnet user-secrets set "EmailSettings:User" "you@example.com"
 dotnet user-secrets set "EmailSettings:Password" "your-app-password"
 dotnet user-secrets set "EmailSettings:From" "you@example.com"
 ```
-
-If neither is configured, the app runs but logs a warning and does **not** send mail (OTP won't arrive — sign-up still reaches the verify page, but you won't get a code).
 
 ### 4. Run
 
@@ -134,26 +138,17 @@ Then open the URL shown in the console (defaults: `http://localhost:5285`, `http
 
 ## Configuration reference
 
-`EmailSettings` (bind from config or user-secrets):
+`EmailSettings`:
+- `ApiKey`: Brevo HTTP API key (`xkeysib-…`).
+- `Host`, `Port`, `User`, `Password`, `EnableSsl`, `From`, `FromName`: Standard SMTP settings.
 
-| Key        | Description |
-|------------|-------------|
-| `ApiKey`   | Brevo HTTP API key (`xkeysib-…`). If set, the API transport is used. |
-| `Host`     | SMTP host (fallback, used only when `ApiKey` is empty). |
-| `Port`     | SMTP port (`587` StartTLS, `465` SSL-on-connect). |
-| `User`     | SMTP username. |
-| `Password` | SMTP password / app password. |
-| `EnableSsl`| Use TLS for SMTP. |
-| `From`     | Sender address (must be a verified sender). |
-| `FromName` | Sender display name (default `Minute Sheet`). |
+`OpenRouterSettings`:
+- `ApiKeys`: Array of OpenRouter API keys (`[0]=Summary`, `[1]=Actions`, `[2]=Agenda`, `[3]=Translation`).
 
-`OpenRouterSettings` (bind from config or user-secrets):
+`LocalWhisper`:
+- `Model`: Whisper model to use (e.g., `base`, `small`).
 
-| Key        | Description |
-|------------|-------------|
-| `ApiKey`   | OpenRouter API key for generating AI document summaries (`sk-or-v1-...`). |
-
-`ConnectionStrings:DefaultConnection` — the SQL Server connection string.
+`ConnectionStrings:DefaultConnection`: SQL Server connection string.
 
 ---
 
@@ -167,19 +162,12 @@ minutesheet/
 │  ├─ appsettings.json              # config (empty email placeholders)
 │  ├─ Components/
 │  │  ├─ App.razor                  # root document, CSS cache-busting
-│  │  ├─ Routes.razor
 │  │  ├─ Account/                   # Identity pages + SmtpEmailSender + OTP verify
-│  │  ├─ Layout/                    # MainLayout, NavMenu (dashboard shell)
-│  │  └─ Pages/
-│  │     ├─ Home.razor              # dashboard landing
-│  │     ├─ Settings.razor
-│  │     └─ Dashboard/              # CreateSheet, History, SheetView, Actions
-│  ├─ Data/
-│  │  ├─ ApplicationDbContext.cs
-│  │  ├─ ApplicationUser.cs         # extended Identity user
-│  │  ├─ MinuteSheet.cs, ApprovalStep.cs, SheetComment.cs, Department.cs
-│  │  ├─ Enums.cs, ApprovalWorkflow.cs
-│  │  └─ Migrations/
+│  │  ├─ Pages/
+│  │     ├─ Dashboard/              # CreateSheet, History, SheetView, Actions
+│  │     └─ Admin/                  # AllSheets, Departments, Users
+│  ├─ Data/                         # EF Models (ApplicationUser, MinuteSheet, ApprovalStep, etc.)
+│  ├─ Services/                     # DocumentSummarization, SpeechTranscription, SheetPdfService, etc.
 │  └─ wwwroot/                      # app.css, bootstrap, quill, images, uploads/
 ```
 
@@ -189,9 +177,9 @@ minutesheet/
 
 - **ApplicationUser** — Identity user + `FullName`, `EmployeeNo`, `Designation`, `DepartmentId`, `AvatarPath`.
 - **Department** — `Name`, `EmployeeCount` (HR / ICT / Finance / Admin seeded).
-- **MinuteSheet** — `Category`, `DescriptionHtml`, attachment name/path, `CreatedByUser`, `CreatedAt`, `Status`, unguessable `Token` (for shareable links).
-- **ApprovalStep** — ordered step with `Action` (Review/Approve) and `Status` (Pending/Reviewed/Approved); cascades from its sheet.
-- **SheetComment** — review / approval / resolution notes tied to a sheet and step.
+- **MinuteSheet** — `Category`, `DescriptionHtml`, attachment name/path, `CreatedByUser`, `CreatedAt`, `Status`, unguessable `Token`.
+- **ApprovalStep** — ordered step with `Action` (Review/Approve) and `Status` (Pending/Reviewed/Approved).
+- **SheetComment** — review / approval / resolution notes.
 
 ---
 
@@ -208,5 +196,5 @@ minutesheet/
 
 ## Notes
 
-- **Secrets never belong in the repo.** Email credentials go in user-secrets (dev) or environment/secret store (deploy).
+- **Secrets never belong in the repo.** Email and OpenRouter credentials go in user-secrets.
 - Uploaded attachments (`wwwroot/uploads/`) are runtime data and are git-ignored.
