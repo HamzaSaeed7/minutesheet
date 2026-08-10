@@ -122,10 +122,8 @@
         }
 
         var code = await UserManager.GenerateUserTokenAsync(user, TokenOptions.DefaultEmailProvider, Purpose);
-        var sent = await EmailSender.SendOtpAsync(Email!, code);
-        Message = sent
-            ? "A new verification code has been sent to your email."
-            : "Error: We couldn't send the email right now. Please try again in a moment.";
+        _ = EmailSender.SendOtpAsync(Email!, code);
+        Message = "A new verification code is being sent to your email.";
     }
 
     // TEMPORARY: signs in without checking the emailed code. Remove before production.

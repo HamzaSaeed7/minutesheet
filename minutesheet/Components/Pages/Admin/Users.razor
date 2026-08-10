@@ -12,6 +12,7 @@
 @inject UserManager<ApplicationUser> UserManager
 @inject AuthenticationStateProvider AuthStateProvider
 @inject minutesheet.Services.ToastService ToastService
+@inject IJSRuntime JS
 
 <PageTitle>Manage Users</PageTitle>
 
@@ -62,18 +63,26 @@
                                 {
                                     <span class="text-muted" style="font-size:12.5px;">You</span>
                                 }
-                                else if (row.IsAdmin)
-                                {
-                                    <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_busy"
-                                            @onclick="() => SetRole(row, makeAdmin: false)">
-                                        Make Employee
-                                    </button>
-                                }
                                 else
                                 {
-                                    <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_busy"
-                                            @onclick="() => SetRole(row, makeAdmin: true)">
-                                        Make Admin
+                                    @if (row.IsAdmin)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_busy"
+                                                @onclick="() => SetRole(row, makeAdmin: false)">
+                                            Make Employee
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-primary" disabled="@_busy"
+                                                @onclick="() => SetRole(row, makeAdmin: true)">
+                                            Make Admin
+                                        </button>
+                                    }
+
+                                    <button type="button" class="btn btn-sm btn-outline-danger" disabled="@_busy"
+                                            @onclick="() => DeleteUserAsync(row)">
+                                        Delete
                                     </button>
                                 }
                             </div>
@@ -142,5 +151,37 @@
         row.IsAdmin = makeAdmin;
         ToastService.ShowSuccess($"{row.User.Email} is now {(makeAdmin ? Roles.Admin : Roles.Employee)}.", "Role updated");
         _busy = false;
+    }
+
+    private async Task DeleteUserAsync(UserRow row)
+    {
+        if (row.IsSelf) return;
+
+        var confirmed = await JS.InvokeAsync<bool>("confirm", $"Are you sure you want to delete user '{row.User.Email}'?\n\nThis action cannot be undone.");
+        if (!confirmed) return;
+
+        _busy = true;
+        try
+        {
+            var result = await UserManager.DeleteAsync(row.User);
+            if (result.Succeeded)
+            {
+                ToastService.ShowSuccess($"User '{row.User.Email}' has been deleted.", "User Deleted");
+                await LoadAsync();
+            }
+            else
+            {
+                var err = string.Join(", ", result.Errors.Select(e => e.Description));
+                ToastService.ShowError($"Could not delete user: {err}", "Delete Failed");
+            }
+        }
+        catch (Exception)
+        {
+            ToastService.ShowError("Cannot delete user who has created minute sheets or action records.", "Delete Restricted");
+        }
+        finally
+        {
+            _busy = false;
+        }
     }
 }

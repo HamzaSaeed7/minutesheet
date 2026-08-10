@@ -102,21 +102,35 @@ namespace minutesheet.Components.Account
             SendAsync(email, "Reset your password",
                 $"Please reset your password using the following code: {resetCode}");
 
-        private Task SendAsync(string to, string subject, string htmlBody, byte[]? attachmentBytes = null, string? attachmentName = null)
+        private async Task SendAsync(string to, string subject, string htmlBody, byte[]? attachmentBytes = null, string? attachmentName = null)
         {
+            var brevoAttempted = false;
             if (!string.IsNullOrWhiteSpace(_settings.ApiKey))
             {
-                return SendViaBrevoApiAsync(to, subject, htmlBody, attachmentBytes, attachmentName);
-            }
-            if (!string.IsNullOrWhiteSpace(_settings.Host))
-            {
-                return SendViaSmtpAsync(to, subject, htmlBody, attachmentBytes, attachmentName);
+                try
+                {
+                    brevoAttempted = true;
+                    await SendViaBrevoApiAsync(to, subject, htmlBody, attachmentBytes, attachmentName);
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    logger.LogWarning(ex, "Brevo API email transport failed. Falling back to SMTP.");
+                }
             }
 
-            logger.LogWarning(
-                "No email transport configured (EmailSettings:ApiKey / :Host both empty). Email to {To} ('{Subject}') was NOT sent.",
-                to, subject);
-            return Task.CompletedTask;
+            if (!string.IsNullOrWhiteSpace(_settings.Host))
+            {
+                await SendViaSmtpAsync(to, subject, htmlBody, attachmentBytes, attachmentName);
+                return;
+            }
+
+            if (!brevoAttempted)
+            {
+                logger.LogWarning(
+                    "No email transport configured (EmailSettings:ApiKey / :Host both empty). Email to {To} ('{Subject}') was NOT sent.",
+                    to, subject);
+            }
         }
 
         private async Task SendViaBrevoApiAsync(string to, string subject, string htmlBody,
@@ -184,7 +198,9 @@ namespace minutesheet.Components.Account
             await client.ConnectAsync(_settings.Host, _settings.Port, socketOptions);
             if (!string.IsNullOrWhiteSpace(_settings.User))
             {
-                await client.AuthenticateAsync(_settings.User, _settings.Password);
+                // Remove any spaces that users commonly copy-paste with Google App Passwords (e.g., "abcd efgh ijkl mnop")
+                var cleanPassword = (_settings.Password ?? "").Replace(" ", "").Trim();
+                await client.AuthenticateAsync(_settings.User, cleanPassword);
             }
             await client.SendAsync(message);
             await client.DisconnectAsync(true);

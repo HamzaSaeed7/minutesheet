@@ -1,124 +1,75 @@
 window.quillInterop = (function () {
     const editors = {};
 
-    let activeRecognition = null;
+    let activeMediaRecorder = null;
+    let activeMediaStream = null;
     let isRecording = false;
-    let sessionStartIndex = 0;
-    let sessionLength = 0;
-    let activeLanguage = '';
-    let activeQuill = null;
-    let sessionTranscript = '';
-    let activeSmartRecognition = null;
-    let isSmartRecording = false;
 
-    function toggleDictation(language, buttonElement, quillInstance) {
-        if (isRecording) {
-            isRecording = false;
-            if (activeRecognition) {
-                activeRecognition.stop();
-            }
-            buttonElement.classList.remove('listening');
-            applyFormattingOnStop();
-            activeRecognition = null;
+    async function toggleMediaRecorderDictation(language, buttonElement, quillInstance) {
+        const label = buttonElement.querySelector('.dictate-label');
+        if (isRecording && activeMediaRecorder) {
+            activeMediaRecorder.stop();
             return;
         }
 
-        if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-            alert('Your browser does not support speech recognition. Please try Google Chrome.');
+        if (!navigator.mediaDevices?.getUserMedia || !window.MediaRecorder) {
+            alert('Audio recording is not supported by this browser. Please use a current version of Chrome, Edge, Firefox, or Safari.');
             return;
         }
-        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-        activeRecognition = new SpeechRecognition();
 
-        activeRecognition.lang = language;
-        activeRecognition.interimResults = false;
-        activeRecognition.continuous = true;
-        activeRecognition.maxAlternatives = 1;
+        try {
+            activeMediaStream = await navigator.mediaDevices.getUserMedia({
+                audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true }
+            });
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+                ? 'audio/webm;codecs=opus'
+                : undefined;
+            const chunks = [];
+            activeMediaRecorder = new MediaRecorder(activeMediaStream, mimeType ? { mimeType } : undefined);
+            activeMediaRecorder.ondataavailable = event => {
+                if (event.data.size > 0) chunks.push(event.data);
+            };
+            activeMediaRecorder.onstop = async () => {
+                isRecording = false;
+                buttonElement.classList.remove('listening');
+                if (label) label.innerText = 'Transcribing...';
+                activeMediaStream?.getTracks().forEach(track => track.stop());
+                activeMediaStream = null;
 
-        activeLanguage = language;
-        activeQuill = quillInstance;
-        sessionTranscript = '';
-        sessionLength = 0;
-
-        const range = quillInstance.getSelection(true);
-        sessionStartIndex = range ? range.index : quillInstance.getLength();
-
-        activeRecognition.onstart = function() {
+                try {
+                    const audio = new Blob(chunks, { type: activeMediaRecorder.mimeType || 'audio/webm' });
+                    const form = new FormData();
+                    const extension = audio.type.includes('mp4') ? 'mp4' : 'webm';
+                    form.append('audio', audio, `recording.${extension}`);
+                    form.append('language', language);
+                    const response = await fetch('/api/transcriptions', { method: 'POST', body: form, credentials: 'same-origin' });
+                    const result = await response.json().catch(() => ({}));
+                    if (!response.ok) throw new Error(result.error || result.detail || 'Transcription failed.');
+                    if (result.text) {
+                        const range = quillInstance.getSelection(true);
+                        const insertPos = range ? range.index : quillInstance.getLength();
+                        const text = `${result.text} `;
+                        quillInstance.insertText(insertPos, text);
+                        quillInstance.setSelection(insertPos + text.length);
+                    }
+                } catch (error) {
+                    console.error('Transcription error', error);
+                    alert(error.message || 'Unable to transcribe this recording.');
+                } finally {
+                    activeMediaRecorder = null;
+                    if (label) label.innerText = 'Dictate';
+                }
+            };
+            activeMediaRecorder.start();
             isRecording = true;
             buttonElement.classList.add('listening');
-        };
-
-        activeRecognition.onresult = function(event) {
-            if (event.results.length > 0) {
-                let latestResultIndex = event.results.length - 1;
-                let transcript = event.results[latestResultIndex][0].transcript;
-                let textToInsert = transcript + ' ';
-
-                let insertPos = sessionStartIndex + sessionLength;
-                quillInstance.insertText(insertPos, textToInsert);
-                sessionLength += textToInsert.length;
-                quillInstance.setSelection(insertPos + textToInsert.length);
-
-                sessionTranscript += textToInsert;
-            }
-        };
-
-        activeRecognition.onerror = function(event) {
-            console.error('Speech recognition error', event.error);
-        };
-
-        activeRecognition.onend = function() {
-            if (isRecording && activeRecognition) {
-                // Browser stopped recognition automatically (e.g., silence).
-                // Auto-restart to enforce true continuous speech until user stops it.
-                try {
-                    activeRecognition.start();
-                } catch (e) {
-                    console.error('Failed to restart recognition:', e);
-                }
-            }
-        };
-
-        activeRecognition.start();
-    }
-
-    function applyFormattingOnStop() {
-        if (sessionLength > 0 && activeQuill) {
-            let cleanTranscript = sessionTranscript.trimEnd();
-            let formattedText = formatNouns(cleanTranscript, activeLanguage);
-            formattedText += ' ';
-
-            activeQuill.deleteText(sessionStartIndex, sessionLength);
-            activeQuill.insertText(sessionStartIndex, formattedText);
-            activeQuill.setSelection(sessionStartIndex + formattedText.length);
+            if (label) label.innerText = 'Stop recording';
+        } catch (error) {
+            console.error('Microphone error', error);
+            alert('Microphone access is required to dictate. Please allow it in your browser settings.');
+            activeMediaStream?.getTracks().forEach(track => track.stop());
+            activeMediaStream = null;
         }
-        sessionLength = 0;
-        sessionTranscript = '';
-    }
-
-    function formatNouns(text, language) {
-        let lines = text.split('\n');
-
-        for (let i = 0; i < lines.length; i++) {
-            if (i === 0 || i === 2) {
-                let targetText = lines[i].trim();
-                if (targetText.length === 0) continue;
-
-                if (language === 'en-US' && typeof window.nlp !== 'undefined') {
-                    let extractedNouns = window.nlp(targetText).nouns().out('array');
-                    if (extractedNouns.length > 0) {
-                        lines[i] = lines[i] + '\n' + extractedNouns.join(', ');
-                    }
-                } else {
-                    let words = targetText.split(/\s+/).filter(w => w.length > 3);
-                    if (words.length > 0) {
-                        lines[i] = lines[i] + '\n' + words.join(', ');
-                    }
-                }
-            }
-        }
-
-        return lines.join('\n');
     }
 
     return {
@@ -164,107 +115,18 @@ window.quillInterop = (function () {
             return text.length === 0 ? '' : html;
         },
 
-        // Dictate into the editor via the browser's speech-recognition engine,
-        // or stop an in-progress session. The optional `language` selects the
-        // recognition locale (e.g. 'en-US' or 'ur-PK').
-        toggleDictation: function (elementId, btn, language) {
+        // Record audio in the browser and transcribe it server-side with Whisper.
+        toggleMediaRecorderDictation: function (elementId, btn, language) {
             const quill = editors[elementId];
             if (!quill) {
                 return;
             }
-            toggleDictation(language || 'en-US', btn, quill);
-        },
-
-        startIntelligentDictation: function (elementId, btn, dotNetHelper) {
-            const quill = editors[elementId];
-            if (!quill) return;
-
-            const label = btn.querySelector('.dictate-label');
-            const originalText = 'Dictate';
-
-            if (isSmartRecording) {
-                if (activeSmartRecognition) {
-                    activeSmartRecognition.stop();
-                }
-                isSmartRecording = false;
-                quill.enable();
-                btn.classList.remove('listening');
-                if (label) label.innerText = originalText;
-                return;
-            }
-
-            if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-                alert('Your browser does not support speech recognition. Please try Google Chrome.');
-                return;
-            }
-            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-            activeSmartRecognition = new SpeechRecognition();
-
-            activeSmartRecognition.lang = 'ur-PK';
-            activeSmartRecognition.interimResults = false;
-            activeSmartRecognition.continuous = false;
-            activeSmartRecognition.maxAlternatives = 1;
-
-            activeSmartRecognition.onstart = function() {
-                isSmartRecording = true;
-                quill.disable();
-                btn.classList.add('listening');
-                if (label) label.innerText = 'Listening...';
-            };
-
-            activeSmartRecognition.onresult = function(event) {
-                if (event.results.length > 0) {
-                    let transcript = event.results[0][0].transcript;
-                    if (label) label.innerText = 'Translating...';
-                    
-                    dotNetHelper.invokeMethodAsync('TranslateUrduToEnglish', transcript)
-                        .then(englishText => {
-                            if (englishText) {
-                                const range = quill.getSelection(true);
-                                let insertPos = range ? range.index : quill.getLength();
-                                quill.insertText(insertPos, englishText + ' ');
-                                quill.setSelection(insertPos + englishText.length + 1);
-                            }
-                        })
-                        .catch(err => {
-                            console.error('Translation error', err);
-                        })
-                        .finally(() => {
-                            isSmartRecording = false;
-                            quill.enable();
-                            btn.classList.remove('listening');
-                            if (label) label.innerText = originalText;
-                        });
-                }
-            };
-
-            activeSmartRecognition.onerror = function(event) {
-                console.error('Speech recognition error', event.error);
-                isSmartRecording = false;
-                quill.enable();
-                btn.classList.remove('listening');
-                if (label) label.innerText = originalText;
-            };
-
-            activeSmartRecognition.onend = function() {
-                if (label && label.innerText === 'Listening...') {
-                   isSmartRecording = false;
-                   quill.enable();
-                   btn.classList.remove('listening');
-                   if (label) label.innerText = originalText;
-                }
-            };
-
-            activeSmartRecognition.start();
+            toggleMediaRecorderDictation(language || 'en-US', btn, quill);
         },
 
         destroy: function (elementId) {
             // Stop any active dictation session when the editor goes away.
-            if (activeRecognition) {
-                try { activeRecognition.stop(); } catch (_) { }
-                activeRecognition = null;
-                isRecording = false;
-            }
+            if (activeMediaRecorder && isRecording) activeMediaRecorder.stop();
             delete editors[elementId];
         },
 
