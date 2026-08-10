@@ -57,21 +57,14 @@ else
         </div>
 
         <div class="content-card">
-            <div class="card-eyebrow" style="margin-bottom:10px;">Category</div>
-            <div class="seg-tabs">
+            <div class="card-eyebrow" style="margin-bottom:10px;">Category &amp; Confidentiality</div>
+            <div class="seg-tabs" style="margin-bottom:14px;">
                 <button type="button" class="seg-tab @(_category == SheetCategory.Financial ? "active" : "")" @onclick="() => _category = SheetCategory.Financial">Financial</button>
                 <button type="button" class="seg-tab @(_category == SheetCategory.NonFinancial ? "active" : "")" @onclick="() => _category = SheetCategory.NonFinancial">Non-Financial</button>
             </div>
-        </div>
-
-        <div class="content-card">
-            <div class="card-eyebrow" style="margin-bottom:10px;">Confidentiality</div>
             <div class="seg-tabs">
                 <button type="button" class="seg-tab @(!_isConfidential ? "active" : "")" @onclick="() => _isConfidential = false">Non-Confidential</button>
                 <button type="button" class="seg-tab @(_isConfidential ? "active" : "")" @onclick="() => _isConfidential = true">Confidential</button>
-            </div>
-            <div style="font-size:12.5px;color:#9296ab;margin-top:10px;">
-                Non-confidential sheets can be viewed by every user. Confidential sheets can only be viewed by you, the approvers listed below, and admins.
             </div>
         </div>
 
@@ -268,25 +261,34 @@ else
         </div>
         @if (_actionItems.Any() || _agendaItems.Any())
         {
-            <div class="content-card d-flex flex-column" style="gap: 16px;">
+            <div class="d-flex flex-column" style="gap: 16px;">
                 @if (_actionItems.Any())
                 {
                     <div>
                         <div class="card-eyebrow" style="margin-bottom:6px; color:#000066;">Extracted Action Items</div>
-                        <small class="text-muted d-block mb-2" style="font-size: 12px;">You can manually edit this list before submitting.</small>
-                        
-                        @foreach (var item in _actionItems)
-                        {
-                            <div class="d-flex flex-column gap-1 mb-3" style="background:#f8f9fa; padding:10px; border-radius:6px; border: 1px solid #e2e8f0;">
-                                <input type="text" class="form-control form-control-sm" @bind="item.Task" placeholder="Task" />
-                                <div class="d-flex gap-2">
-                                    <input type="text" class="form-control form-control-sm" @bind="item.Owner" placeholder="Owner" />
-                                    <input type="text" class="form-control form-control-sm" @bind="item.Deadline" placeholder="Deadline" />
-                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _actionItems.Remove(item)">&times;</button>
-                                </div>
-                            </div>
-                        }
-                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" @onclick="() => _actionItems.Add(new minutesheet.Services.ActionItemDto())">+ Add Item</button>
+                        <small class="text-muted d-block mb-2" style="font-size: 12px;">Click the pencil to edit a bullet, or the trash to remove it.</small>
+
+                        <ul style="list-style:none; margin:0; padding:0;">
+                            @foreach (var item in _actionItems)
+                            {
+                                <li style="display:flex; align-items:flex-start; gap:6px; margin-bottom:8px;">
+                                    <span style="flex:0 0 auto; line-height:1.55;">&#8226;</span>
+                                    @if (_editingItems == item)
+                                    {
+                                        <span contenteditable="true" @ref="_actionEditRef" title="Click to edit" style="flex:1 1 auto; min-width:0; outline:none; white-space:pre-wrap; word-break:break-word; line-height:1.55;">@_editingItemsText</span>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" title="Save" @onclick="() => SaveActionItem(item)">&#10003;</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Cancel" @onclick="() => _editingItems = null">&#10005;</button>
+                                    }
+                                    else
+                                    {
+                                        <span style="flex:1 1 auto; line-height:1.55;">@FormatActionItem(item)</span>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" title="Edit" @onclick="() => StartEditActionItem(item)">&#9998;</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => _actionItems.Remove(item)">&#128465;</button>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" @onclick="AddActionItem">+ Add Item</button>
                     </div>
                 }
 
@@ -299,20 +301,29 @@ else
                 {
                     <div>
                         <div class="card-eyebrow" style="margin-bottom:6px; color:#000066;">Suggested Next-Meeting Agenda</div>
-                        <small class="text-muted d-block mb-2" style="font-size: 12px;">You can manually edit this agenda before submitting.</small>
-                        
-                        @foreach (var item in _agendaItems)
-                        {
-                            <div class="d-flex flex-column gap-1 mb-3" style="background:#f8f9fa; padding:10px; border-radius:6px; border: 1px solid #e2e8f0;">
-                                <input type="text" class="form-control form-control-sm" @bind="item.Topic" placeholder="Topic" />
-                                <div class="d-flex gap-2">
-                                    <input type="text" class="form-control form-control-sm" @bind="item.Owner" placeholder="Owner" />
-                                    <input type="text" class="form-control form-control-sm" @bind="item.TimeBox" placeholder="Time box" />
-                                    <button type="button" class="btn btn-sm btn-outline-danger" @onclick="() => _agendaItems.Remove(item)">&times;</button>
-                                </div>
-                            </div>
-                        }
-                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" @onclick="() => _agendaItems.Add(new minutesheet.Services.AgendaItemDto())">+ Add Agenda Item</button>
+                        <small class="text-muted d-block mb-2" style="font-size: 12px;">Click the pencil to edit a bullet, or the trash to remove it.</small>
+
+                        <ul style="list-style:none; margin:0; padding:0;">
+                            @foreach (var item in _agendaItems)
+                            {
+                                <li style="display:flex; align-items:flex-start; gap:6px; margin-bottom:8px;">
+                                    <span style="flex:0 0 auto; line-height:1.55;">&#8226;</span>
+                                    @if (_editingAgenda == item)
+                                    {
+                                        <span contenteditable="true" @ref="_agendaEditRef" title="Click to edit" style="flex:1 1 auto; min-width:0; outline:none; white-space:pre-wrap; word-break:break-word; line-height:1.55;">@_editingAgendaText</span>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" title="Save" @onclick="() => SaveAgendaItem(item)">&#10003;</button>
+                                        <button type="button" class="btn btn-sm btn-outline-secondary" title="Cancel" @onclick="() => _editingAgenda = null">&#10005;</button>
+                                    }
+                                    else
+                                    {
+                                        <span style="flex:1 1 auto; line-height:1.55;">@FormatAgendaItem(item)</span>
+                                        <button type="button" class="btn btn-sm btn-outline-primary" title="Edit" @onclick="() => StartEditAgendaItem(item)">&#9998;</button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" title="Delete" @onclick="() => _agendaItems.Remove(item)">&#128465;</button>
+                                    }
+                                </li>
+                            }
+                        </ul>
+                        <button type="button" class="btn btn-sm btn-outline-secondary w-100" @onclick="AddAgendaItem">+ Add Agenda Item</button>
                     </div>
                 }
             </div>
@@ -359,6 +370,13 @@ else
     private DotNetObjectReference<CreateSheet>? _objRef;
     private ElementReference _dictateBtn;
     private string _dictationLanguage = "en-US";
+
+    private ActionItemDto? _editingItems;
+    private string _editingItemsText = "";
+    private ElementReference _actionEditRef;
+    private AgendaItemDto? _editingAgenda;
+    private string _editingAgendaText = "";
+    private ElementReference _agendaEditRef;
 
     private const int MaxApprovals = 20;
     private static readonly string[] AllowedExtensions = { ".pdf", ".doc", ".docx" };
@@ -910,6 +928,132 @@ else
     private async Task DownloadDocxAsync() => await DownloadSummaryAsync("docx");
     private async Task DownloadDocAsync() => await DownloadSummaryAsync("doc");
     private async Task DownloadPdfAsync() => await DownloadSummaryAsync("pdf");
+
+    private string FormatActionItem(ActionItemDto item)
+    {
+        var text = item.Task ?? "";
+        if (!string.IsNullOrWhiteSpace(item.Owner))
+        {
+            text += $" — {item.Owner}";
+        }
+        if (!string.IsNullOrWhiteSpace(item.Deadline))
+        {
+            text += $" (by {item.Deadline})";
+        }
+        return text.Trim();
+    }
+
+    private string FormatAgendaItem(AgendaItemDto item)
+    {
+        var text = item.Topic ?? "";
+        if (!string.IsNullOrWhiteSpace(item.Owner))
+        {
+            text += $" — {item.Owner}";
+        }
+        if (!string.IsNullOrWhiteSpace(item.TimeBox))
+        {
+            text += $" ({item.TimeBox})";
+        }
+        return text.Trim();
+    }
+
+    private void StartEditActionItem(ActionItemDto item)
+    {
+        _editingItems = item;
+        _editingItemsText = FormatActionItem(item);
+    }
+
+    private void StartEditAgendaItem(AgendaItemDto item)
+    {
+        _editingAgenda = item;
+        _editingAgendaText = FormatAgendaItem(item);
+    }
+
+    private void AddActionItem()
+    {
+        var item = new ActionItemDto();
+        _actionItems.Add(item);
+        StartEditActionItem(item);
+    }
+
+    private void AddAgendaItem()
+    {
+        var item = new AgendaItemDto();
+        _agendaItems.Add(item);
+        StartEditAgendaItem(item);
+    }
+
+    private async Task SaveActionItem(ActionItemDto item)
+    {
+        var text = await JS.InvokeAsync<string>("quillInterop.getElementText", _actionEditRef);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            _actionItems.Remove(item);
+        }
+        else
+        {
+            ParseActionItem(item, text);
+        }
+        _editingItems = null;
+    }
+
+    private async Task SaveAgendaItem(AgendaItemDto item)
+    {
+        var text = await JS.InvokeAsync<string>("quillInterop.getElementText", _agendaEditRef);
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            _agendaItems.Remove(item);
+        }
+        else
+        {
+            ParseAgendaItem(item, text);
+        }
+        _editingAgenda = null;
+    }
+
+    private void ParseActionItem(ActionItemDto item, string text)
+    {
+        item.Deadline = "";
+        item.Owner = "";
+        var deadlineMatch = System.Text.RegularExpressions.Regex.Match(text, @"\(by\s+(.+?)\)\s*$");
+        if (deadlineMatch.Success)
+        {
+            item.Deadline = deadlineMatch.Groups[1].Value.Trim();
+            text = text.Substring(0, deadlineMatch.Index).TrimEnd();
+        }
+        var sep = text.LastIndexOf(" — ");
+        if (sep > 0)
+        {
+            item.Task = text.Substring(0, sep).Trim();
+            item.Owner = text.Substring(sep + 3).Trim();
+        }
+        else
+        {
+            item.Task = text.Trim();
+        }
+    }
+
+    private void ParseAgendaItem(AgendaItemDto item, string text)
+    {
+        item.TimeBox = "";
+        item.Owner = "";
+        var timeMatch = System.Text.RegularExpressions.Regex.Match(text, @"\((.+?)\)\s*$");
+        if (timeMatch.Success)
+        {
+            item.TimeBox = timeMatch.Groups[1].Value.Trim();
+            text = text.Substring(0, timeMatch.Index).TrimEnd();
+        }
+        var sep = text.LastIndexOf(" — ");
+        if (sep > 0)
+        {
+            item.Topic = text.Substring(0, sep).Trim();
+            item.Owner = text.Substring(sep + 3).Trim();
+        }
+        else
+        {
+            item.Topic = text.Trim();
+        }
+    }
 
     private async Task DownloadSummaryAsync(string format)
     {
