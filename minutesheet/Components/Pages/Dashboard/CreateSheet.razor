@@ -58,23 +58,32 @@ else
 
         <div class="content-card">
             <div class="row g-2" style="margin-bottom:12px;">
-                <div class="col-sm-4">
+                <div class="col-lg-3 col-sm-6">
                     <div class="card-eyebrow" style="margin-bottom:10px;">Category <span class="text-danger">*</span></div>
                     <select class="form-select fw-normal" @bind="_categoryStr" @bind:after="OnCategoryChanged">
                         <option value="Financial">Financial</option>
                         <option value="NonFinancial">Non-Financial</option>
                     </select>
                 </div>
-                <div class="col-sm-4">
+                <div class="col-lg-3 col-sm-6">
                     <div class="card-eyebrow" style="margin-bottom:10px;">Confidentiality <span class="text-danger">*</span></div>
                     <select class="form-select fw-normal" @bind="_isConfidentialStr">
                         <option value="false">Non-Confidential</option>
                         <option value="true">Confidential</option>
                     </select>
                 </div>
-                <div class="col-sm-4">
-                    <div class="card-eyebrow" style="margin-bottom:10px;">Department <span class="text-danger">*</span></div>
+                <div class="col-lg-3 col-sm-6">
+                    <div class="card-eyebrow" style="margin-bottom:10px;">Initiated By <span class="text-danger">*</span></div>
                     <select class="form-select fw-normal" @bind="_departmentId">
+                        @foreach (var dept in _departments)
+                        {
+                            <option value="@dept.Id">@dept.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-lg-3 col-sm-6">
+                    <div class="card-eyebrow" style="margin-bottom:10px;">Intended For <span class="text-danger">*</span></div>
+                    <select class="form-select fw-normal" @bind="_intendedForDepartmentId">
                         @foreach (var dept in _departments)
                         {
                             <option value="@dept.Id">@dept.Name</option>
@@ -401,6 +410,7 @@ else
     private bool _isConfidential = false;
     private string _isConfidentialStr = "false";
     private int? _departmentId;
+    private int? _intendedForDepartmentId;
     private List<Department> _departments = new();
     private readonly List<ApprovalRow> _rows = new() { new ApprovalRow { Action = ApprovalAction.Review } };
     private List<string> _approverEmails = new();
@@ -435,6 +445,7 @@ else
         if (!_isEdit && _departments.Any())
         {
             _departmentId = _departments.First().Id;
+            _intendedForDepartmentId = _departments.First().Id;
         }
 
         var authState = await AuthState;
@@ -486,6 +497,9 @@ else
                     _amount = sheet.Amount;
                     _currency = sheet.Currency ?? "PKR";
                     _departmentId = sheet.DepartmentId;
+                    // Sheets created before this field existed have no value; fall back
+                    // to the first option so the dropdown matches what it submits.
+                    _intendedForDepartmentId = sheet.IntendedForDepartmentId ?? _departments.FirstOrDefault()?.Id;
                     _isConfidential = sheet.IsConfidential;
                     _isConfidentialStr = sheet.IsConfidential ? "true" : "false";
                     _initialDescriptionHtml = sheet.DescriptionHtml;
@@ -630,7 +644,13 @@ else
 
             if (_departmentId == null)
             {
-                ToastService.ShowError("Please select a department.", "Missing department");
+                ToastService.ShowError("Please select the department that initiated this sheet.", "Missing department");
+                return;
+            }
+
+            if (_intendedForDepartmentId == null)
+            {
+                ToastService.ShowError("Please select the department this sheet is intended for.", "Missing department");
                 return;
             }
 
@@ -700,6 +720,7 @@ else
                 sheet.Amount = _category == SheetCategory.Financial ? _amount : null;
                 sheet.Currency = _category == SheetCategory.Financial ? _currency : null;
                 sheet.DepartmentId = _departmentId;
+                sheet.IntendedForDepartmentId = _intendedForDepartmentId;
                 sheet.IsConfidential = _isConfidential;
                 sheet.DescriptionHtml = descriptionHtml;
                 sheet.Summary = _summary;
@@ -764,6 +785,7 @@ else
                     Amount = _category == SheetCategory.Financial ? _amount : null,
                     Currency = _category == SheetCategory.Financial ? _currency : null,
                     DepartmentId = _departmentId,
+                    IntendedForDepartmentId = _intendedForDepartmentId,
                     IsConfidential = _isConfidential,
                     DescriptionHtml = descriptionHtml,
                     Summary = _summary,

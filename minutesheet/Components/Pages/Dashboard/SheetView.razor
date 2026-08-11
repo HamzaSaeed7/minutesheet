@@ -96,8 +96,15 @@ else
             @if (_sheet.Department != null)
             {
                 <div>
-                    <div class="creator-label mb-1">Department</div>
+                    <div class="creator-label mb-1">Initiated By</div>
                     <div style="font-weight:500;">@_sheet.Department.Name</div>
+                </div>
+            }
+            @if (_sheet.IntendedForDepartment != null)
+            {
+                <div>
+                    <div class="creator-label mb-1">Intended For</div>
+                    <div style="font-weight:500;">@_sheet.IntendedForDepartment.Name</div>
                 </div>
             }
             <div>
@@ -487,6 +494,7 @@ else
             .Include(m => m.ApprovalSteps)
             .Include(m => m.Comments)
             .Include(m => m.Department)
+            .Include(m => m.IntendedForDepartment)
             .Include(m => m.CreatedByUser!).ThenInclude(u => u.Department)
             .FirstOrDefaultAsync(m => m.Token == Token);
 

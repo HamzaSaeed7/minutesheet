@@ -68,8 +68,17 @@ namespace minutesheet.Services
                         {
                             col.Item().PaddingBottom(2).Text(text =>
                             {
-                                text.Span("Department:  ").Bold().FontColor("#000066");
+                                text.Span("Initiated By:  ").Bold().FontColor("#000066");
                                 text.Span(sheet.Department.Name);
+                            });
+                        }
+
+                        if (sheet.IntendedForDepartment != null)
+                        {
+                            col.Item().PaddingBottom(2).Text(text =>
+                            {
+                                text.Span("Intended For:  ").Bold().FontColor("#000066");
+                                text.Span(sheet.IntendedForDepartment.Name);
                             });
                         }
                         col.Item().PaddingBottom(2).Text($"Prepared by:  {creatorName}");

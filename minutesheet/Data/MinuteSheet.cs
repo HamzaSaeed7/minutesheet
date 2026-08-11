@@ -61,6 +61,10 @@ namespace minutesheet.Data
         public int? DepartmentId { get; set; }
         public Department? Department { get; set; }
 
+        // Department this minute sheet is intended for (its recipient).
+        public int? IntendedForDepartmentId { get; set; }
+        public Department? IntendedForDepartment { get; set; }
+
         public ICollection<ApprovalStep> ApprovalSteps { get; set; } = new List<ApprovalStep>();
 
         public ICollection<SheetComment> Comments { get; set; } = new List<SheetComment>();
