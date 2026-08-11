@@ -154,7 +154,7 @@ else
                                             <span>
                                                 @if (_editingId == dept.Id)
                                                 {
-                                                    <input class="form-control form-control-sm" style="min-width:220px;" @bind="_editName" autofocus />
+                                                    <input class="form-control form-control-sm" style="min-width:220px;" @bind="_editName" @bind:event="oninput" autofocus />
                                                 }
                                                 else
                                                 {
@@ -175,7 +175,7 @@ else
                                         <div class="d-inline-flex align-items-center gap-2">
                                             @if (_editingId == dept.Id)
                                             {
-                                                <button type="button" class="btn btn-sm btn-primary" disabled="@_busy || string.IsNullOrWhiteSpace(_editName)"
+                                                <button type="button" class="btn btn-sm btn-primary" disabled="@(_busy || string.IsNullOrWhiteSpace(_editName))"
                                                         @onclick="() => SaveEditAsync(dept)">Save</button>
                                                 <button type="button" class="btn btn-sm btn-outline-secondary" disabled="@_busy"
                                                         @onclick="CancelEdit">Cancel</button>

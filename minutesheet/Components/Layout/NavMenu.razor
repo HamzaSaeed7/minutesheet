@@ -296,7 +296,14 @@
                 .Where(s => s.ApproverEmail == email && s.Status != ApprovalStepStatus.Approved)
                 .Include(s => s.MinuteSheet!).ThenInclude(m => m.ApprovalSteps)
                 .ToListAsync();
-            _pendingCount = mySteps.Count(s => ApprovalWorkflow.IsActionable(s, s.MinuteSheet!.ApprovalSteps));
+            var approverPending = mySteps.Count(s => s.Status == ApprovalStepStatus.Pending && ApprovalWorkflow.IsActionable(s, s.MinuteSheet!.ApprovalSteps));
+
+            // Also count sheets this user created that have been returned (reviewed) and need resolution.
+            var returnedCount = await db.MinuteSheets
+                .Where(m => m.CreatedByUserId == userId && m.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed))
+                .CountAsync();
+
+            _pendingCount = approverPending + returnedCount;
         }
     }
 
