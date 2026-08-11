@@ -66,3 +66,10 @@ Once you have Whisper installed and the User Secrets configured, simply run the 
 dotnet run
 ```
 And you are good to go!
+
+## 4. Attachment & AI Insights Logic Updates
+
+Recently, we removed the strict `.pdf`/`.doc`/`.docx` limitation on the "Create Minute Sheet" page. 
+- Users can now upload **any file type** up to 10 MB.
+- When generating **AI Insights** (Summaries, Action Items, Agenda), the system intelligently intercepts attachments.
+- If an image file (e.g., `.png`, `.jpg`, `.webp`) or any unsupported file type is attached, the system will **bypass text extraction** for the file and generate insights strictly based on the provided rich-text description and form metadata, preventing processing errors and API failures.
