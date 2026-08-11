@@ -116,7 +116,6 @@ public class DocumentSummarizationService
         var payload = new
         {
             model = "openrouter/free",
-            response_format = new { type = "json_object" },
             messages = new[]
             {
                 new { role = "system", content = "You are a minute-sheet summarizer. Given the provided text, produce a concise professional summary and extract the key actions and decisions. Respond ONLY with a single JSON object shaped exactly like {\"summary\": \"...\", \"actions\": [\"...\", \"...\"], \"decisions\": [\"...\", \"...\"]}. An 'action' is something that must be done or followed up (who does what by when). A 'decision' is a resolution, conclusion, or agreement reached in the meeting. Extract EVERY decision mentioned in the text. If the text does not state an explicit decision, capture the main conclusions, resolutions, or agreed takeaways as decisions instead of leaving the array empty. The decisions array must be non-empty whenever the text contains any meaningful outcome or conclusion. Regardless of whether the input text is in English, Urdu script, or Roman Urdu, the summary, every action and every decision MUST be written in English." },
@@ -251,7 +250,6 @@ public class DocumentSummarizationService
         var payload = new
         {
             model = "openrouter/free",
-            response_format = new { type = "json_object" },
             messages = new[]
             {
                 new { role = "system", content = "You are an AI assistant. Extract a list of action items from the provided meeting notes. Return a JSON array named 'action_items' where each item contains a 'task', 'owner', and 'deadline'." },
@@ -301,7 +299,6 @@ public class DocumentSummarizationService
         var payload = new
         {
             model = "openrouter/free",
-            response_format = new { type = "json_object" },
             messages = new[]
             {
                 new { role = "system", content = "You are an AI assistant. Analyze the provided meeting notes and suggest a next-meeting agenda. Output a valid JSON array named 'agenda_items'. Each item must contain a 'topic' (what to discuss), an 'owner' (who leads the topic), and a 'time_box' (e.g., '10 mins')." },
