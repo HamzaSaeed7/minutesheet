@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
 
 namespace minutesheet.Data
 {
@@ -12,6 +13,14 @@ namespace minutesheet.Data
         public string Title { get; set; } = "";
 
         public SheetCategory Category { get; set; }
+
+        // Monetary amount — only applicable when Category == Financial.
+        [Column(TypeName = "decimal(18,2)")]
+        public decimal? Amount { get; set; }
+
+        // Currency code for the amount (e.g. PKR, USD, EUR).
+        [MaxLength(10)]
+        public string? Currency { get; set; }
 
         // Rich-text HTML produced by the Quill editor.
         public string DescriptionHtml { get; set; } = "";
@@ -47,6 +56,10 @@ namespace minutesheet.Data
 
         // Unguessable token used to build the sheet's unique shareable link.
         public Guid Token { get; set; } = Guid.NewGuid();
+
+        // Department that initiated this minute sheet.
+        public int? DepartmentId { get; set; }
+        public Department? Department { get; set; }
 
         public ICollection<ApprovalStep> ApprovalSteps { get; set; } = new List<ApprovalStep>();
 

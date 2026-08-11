@@ -61,10 +61,29 @@ namespace minutesheet.Services
                         col.Item().PaddingBottom(2).Text(text =>
                         {
                             text.Span("Category:  ").Bold().FontColor("#000066");
-                            text.Span(sheet.Category.ToString());
+                            text.Span(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial");
                         });
+                        
+                        if (sheet.Department != null)
+                        {
+                            col.Item().PaddingBottom(2).Text(text =>
+                            {
+                                text.Span("Department:  ").Bold().FontColor("#000066");
+                                text.Span(sheet.Department.Name);
+                            });
+                        }
                         col.Item().PaddingBottom(2).Text($"Prepared by:  {creatorName}");
                         col.Item().PaddingBottom(8).Text($"Status:  {status}");
+
+                        if (sheet.Category == SheetCategory.Financial && sheet.Amount.HasValue)
+                        {
+                            var currency = string.IsNullOrWhiteSpace(sheet.Currency) ? "PKR" : sheet.Currency;
+                            col.Item().PaddingBottom(8).Text(text =>
+                            {
+                                text.Span("Approval Amount:  ").Bold().FontColor("#000066");
+                                text.Span($"{currency} {sheet.Amount.Value:N2}");
+                            });
+                        }
 
                         if (actionItems.Count > 0)
                         {
@@ -92,14 +111,7 @@ namespace minutesheet.Services
                             col.Item().PaddingTop(8).Text($"Attachment:  {sheet.AttachmentFileName}");
                         }
 
-                        if (sheet.ApprovalSteps.Count > 0)
-                        {
-                            col.Item().PaddingTop(8).Text("Approval workflow").FontSize(14).Bold().FontColor("#000066");
-                            foreach (var step in sheet.ApprovalSteps.OrderBy(s => s.StepIndex))
-                            {
-                                col.Item().PaddingLeft(6).Text($"Step {step.StepIndex}:  {step.ApproverEmail}  —  {step.Action} ({StatusName(step.Status)})");
-                            }
-                        }
+
                     });
 
                     page.Footer().AlignCenter().Text(x =>

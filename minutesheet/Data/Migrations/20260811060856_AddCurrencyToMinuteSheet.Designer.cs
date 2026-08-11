@@ -3,17 +3,20 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using minutesheet.Data;
 
 #nullable disable
 
-namespace minutesheet.Migrations
+namespace minutesheet.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260811060856_AddCurrencyToMinuteSheet")]
+    partial class AddCurrencyToMinuteSheet
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -360,9 +363,6 @@ namespace minutesheet.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("nvarchar(10)");
 
-                    b.Property<int?>("DepartmentId")
-                        .HasColumnType("int");
-
                     b.Property<string>("DescriptionHtml")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
@@ -392,8 +392,6 @@ namespace minutesheet.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("Token")
                         .IsUnique();
@@ -594,13 +592,7 @@ namespace minutesheet.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("minutesheet.Data.Department", "Department")
-                        .WithMany()
-                        .HasForeignKey("DepartmentId");
-
                     b.Navigation("CreatedByUser");
-
-                    b.Navigation("Department");
                 });
 
             modelBuilder.Entity("minutesheet.Data.SheetComment", b =>
