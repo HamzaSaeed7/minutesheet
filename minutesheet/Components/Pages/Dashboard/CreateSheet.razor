@@ -247,6 +247,20 @@ else
     </div>
 
     <div class="d-flex flex-column" style="gap:16px;">
+        <div class="info-note">
+            @if (_workflowLocked)
+            {
+                <text>Approvals are already in progress. Updating the description or attachment here doesn't change the approval steps — use <strong>Resolve</strong> on the sheet to send a reviewed step back to its approver.</text>
+            }
+            else if (_isEdit)
+            {
+                <text>Saving will notify all approvers by email that the sheet was updated.</text>
+            }
+            else
+            {
+                <text>Approvers are notified by email as soon as you submit. Review steps require a comment before moving on; approval steps don't.</text>
+            }
+        </div>
         @if (_creator is not null)
         {
             <div class="prepared-card">
@@ -280,26 +294,12 @@ else
                 </div>
             </div>
         }
-        <div class="info-note">
-            @if (_workflowLocked)
-            {
-                <text>Approvals are already in progress. Updating the description or attachment here doesn't change the approval steps — use <strong>Resolve</strong> on the sheet to send a reviewed step back to its approver.</text>
-            }
-            else if (_isEdit)
-            {
-                <text>Saving will notify all approvers by email that the sheet was updated.</text>
-            }
-            else
-            {
-                <text>Approvers are notified by email as soon as you submit. Review steps require a comment before moving on; approval steps don't.</text>
-            }
-        </div>
         @if (_actionItems.Any() || _agendaItems.Any())
         {
             <div class="d-flex flex-column" style="gap: 16px;">
                 @if (_actionItems.Any())
                 {
-                    <div>
+                    <div class="content-card">
                         <div class="card-eyebrow" style="margin-bottom:6px; color:#000066;">Extracted Action Items</div>
                         <small class="text-muted d-block mb-2" style="font-size: 12px;">Click the pencil to edit a bullet, or the trash to remove it.</small>
 
@@ -334,7 +334,7 @@ else
 
                 @if (_agendaItems.Any())
                 {
-                    <div>
+                    <div class="content-card">
                         <div class="card-eyebrow" style="margin-bottom:6px; color:#000066;">Suggested Next-Meeting Agenda</div>
                         <small class="text-muted d-block mb-2" style="font-size: 12px;">Click the pencil to edit a bullet, or the trash to remove it.</small>
 
