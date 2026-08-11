@@ -11,6 +11,7 @@ namespace minutesheet.Data
         public DbSet<SheetComment> Comments => Set<SheetComment>();
         public DbSet<SheetShare> SheetShares => Set<SheetShare>();
         public DbSet<SheetSuggestion> SheetSuggestions => Set<SheetSuggestion>();
+        public DbSet<DomainVocabularyTerm> DomainVocabularyTerms => Set<DomainVocabularyTerm>();
 
         protected override void OnModelCreating(ModelBuilder builder)
         {
@@ -85,6 +86,19 @@ namespace minutesheet.Data
                 new Department { Id = 2, Name = "ICT", EmployeeCount = 0 },
                 new Department { Id = 3, Name = "Finance", EmployeeCount = 0 },
                 new Department { Id = 4, Name = "Admin", EmployeeCount = 0 });
+
+            builder.Entity<DomainVocabularyTerm>().HasData(
+                new DomainVocabularyTerm { Id = 1, Category = VocabularyCategory.Person, Term = "Ahmad", Aliases = "Ahmed, Ahmet", IsActive = true },
+                new DomainVocabularyTerm { Id = 2, Category = VocabularyCategory.Person, Term = "Hammad", Aliases = "Hamad", IsActive = true },
+                new DomainVocabularyTerm { Id = 3, Category = VocabularyCategory.Person, Term = "Umair", Aliases = "Omair, Umer", IsActive = true },
+                new DomainVocabularyTerm { Id = 4, Category = VocabularyCategory.Person, Term = "Waqas", Aliases = "Wakas, Wakkas", IsActive = true },
+                new DomainVocabularyTerm { Id = 5, Category = VocabularyCategory.Product, Term = "Minute Sheet", Aliases = "MinuteSheet, Minutesheet", IsActive = true },
+                new DomainVocabularyTerm { Id = 6, Category = VocabularyCategory.Platform, Term = "GitHub", Aliases = "Git hub, Github", IsActive = true },
+                new DomainVocabularyTerm { Id = 7, Category = VocabularyCategory.Platform, Term = "Jira", Aliases = "Jeera, Geera", IsActive = true },
+                new DomainVocabularyTerm { Id = 8, Category = VocabularyCategory.Technology, Term = "Blazor", Aliases = "Blazer, Blazar", IsActive = true },
+                new DomainVocabularyTerm { Id = 9, Category = VocabularyCategory.Technology, Term = ".NET", Aliases = "Dot net, dotnet", IsActive = true },
+                new DomainVocabularyTerm { Id = 10, Category = VocabularyCategory.Abbreviation, Term = "QA", Aliases = "Q A, cue a", IsActive = true },
+                new DomainVocabularyTerm { Id = 11, Category = VocabularyCategory.Abbreviation, Term = "UAT", Aliases = "U A T, you a t", IsActive = true });
         }
     }
 }

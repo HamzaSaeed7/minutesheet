@@ -3,15 +3,20 @@ using System.ComponentModel;
 
 namespace minutesheet.Services;
 
-public sealed class SpeechTranscriptionService
+public interface ILocalWhisperTranscriptionService
+{
+    Task<string> TranscribeAsync(IFormFile audio, string language, CancellationToken cancellationToken);
+}
+
+public class LocalWhisperTranscriptionService : ILocalWhisperTranscriptionService
 {
     private const long MaxAudioBytes = 25 * 1024 * 1024;
     private readonly IConfiguration _configuration;
-    private readonly ILogger<SpeechTranscriptionService> _logger;
+    private readonly ILogger<LocalWhisperTranscriptionService> _logger;
 
-    public SpeechTranscriptionService(
+    public LocalWhisperTranscriptionService(
         IConfiguration configuration,
-        ILogger<SpeechTranscriptionService> logger)
+        ILogger<LocalWhisperTranscriptionService> logger)
     {
         _configuration = configuration;
         _logger = logger;
