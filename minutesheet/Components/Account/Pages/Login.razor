@@ -111,16 +111,17 @@
         if (result.Succeeded)
         {
             var code = await UserManager.GenerateUserTokenAsync(user, TokenOptions.DefaultEmailProvider, "login-otp");
-            var sent = await EmailSender.SendOtpAsync(user.Email!, code);
+            // Email delivery can take several seconds (or wait for a network timeout).
+            // The token has already been generated and persisted, so send it off the
+            // request path and take the user straight to the verification screen.
+            _ = EmailSender.SendOtpAsync(user.Email!, code);
 
             var otpUri = NavigationManager.GetUriWithQueryParameters(
                 NavigationManager.ToAbsoluteUri("Account/LoginOtp").AbsoluteUri,
                 new Dictionary<string, object?> { ["email"] = user.Email, ["returnUrl"] = ReturnUrl, ["rememberMe"] = Input.RememberMe });
 
             RedirectManager.RedirectToWithStatus(otpUri,
-                sent
-                    ? "We sent a 6-digit code to your email. Enter it to finish logging in."
-                    : "Error: We couldn't send the verification email. Use \"Resend code\" on the next page.",
+                "Your 6-digit verification code is being sent. Enter it when it arrives.",
                 HttpContext);
         }
         else if (result.IsLockedOut)
