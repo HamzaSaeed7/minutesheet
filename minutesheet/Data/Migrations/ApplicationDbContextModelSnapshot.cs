@@ -335,6 +335,9 @@ namespace minutesheet.Migrations
                     b.Property<string>("ActionItems")
                         .HasColumnType("nvarchar(max)");
 
+                    b.Property<decimal?>("Amount")
+                        .HasColumnType("decimal(18,2)");
+
                     b.Property<string>("AttachmentFileName")
                         .HasMaxLength(260)
                         .HasColumnType("nvarchar(260)");
@@ -353,9 +356,19 @@ namespace minutesheet.Migrations
                         .IsRequired()
                         .HasColumnType("nvarchar(450)");
 
+                    b.Property<string>("Currency")
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.Property<int?>("DepartmentId")
+                        .HasColumnType("int");
+
                     b.Property<string>("DescriptionHtml")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
+
+                    b.Property<bool>("IsConfidential")
+                        .HasColumnType("bit");
 
                     b.Property<string>("NextMeetingAgenda")
                         .HasColumnType("nvarchar(max)");
@@ -379,6 +392,8 @@ namespace minutesheet.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedByUserId");
+
+                    b.HasIndex("DepartmentId");
 
                     b.HasIndex("Token")
                         .IsUnique();
@@ -579,7 +594,13 @@ namespace minutesheet.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
+                    b.HasOne("minutesheet.Data.Department", "Department")
+                        .WithMany()
+                        .HasForeignKey("DepartmentId");
+
                     b.Navigation("CreatedByUser");
+
+                    b.Navigation("Department");
                 });
 
             modelBuilder.Entity("minutesheet.Data.SheetComment", b =>
