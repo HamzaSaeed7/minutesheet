@@ -873,8 +873,8 @@ else
                 }
             }
 
-            // Start tasks in parallel
-            var summaryTask = SummarizationService.GenerateSummaryAsync(
+            // Execute tasks sequentially to avoid rate limiting (HTTP 429) on the free tier
+            var result = await SummarizationService.GenerateSummaryAsync(
                 _category.ToString(), 
                 creatorName, 
                 creatorDesignation, 
@@ -882,14 +882,12 @@ else
                 creatorEmpNo, 
                 descriptionHtml, 
                 aiFile);
-            var actionItemsTask = SummarizationService.ExtractActionItemsAsync(plainText);
-            var agendaTask = SummarizationService.GenerateAgendaAsync(plainText);
 
-            // Await all concurrently
-            await Task.WhenAll(summaryTask, actionItemsTask, agendaTask);
+            var actionItemsTaskResult = await SummarizationService.ExtractActionItemsAsync(plainText);
+            
+            var agendaTaskResult = await SummarizationService.GenerateAgendaAsync(plainText);
 
             // 1. Assign Summary
-            var result = summaryTask.Result;
             _summary = result.Summary;
             _actions = result.Actions;
             _decisions = result.Decisions;
@@ -897,7 +895,7 @@ else
             // 2. Assign Tasks
             try
             {
-                var taskResultJson = actionItemsTask.Result;
+                var taskResultJson = actionItemsTaskResult;
                 var taskResponse = System.Text.Json.JsonSerializer.Deserialize<minutesheet.Services.ActionItemsResponseDto>(taskResultJson);
                 if (taskResponse?.ActionItems != null)
                 {
@@ -912,7 +910,7 @@ else
             // 3. Assign Agenda
             try
             {
-                var agendaResultJson = agendaTask.Result;
+                var agendaResultJson = agendaTaskResult;
                 var agendaResponse = System.Text.Json.JsonSerializer.Deserialize<minutesheet.Services.AgendaResponseDto>(agendaResultJson);
                 if (agendaResponse?.AgendaItems != null)
                 {

@@ -1,0 +1,124 @@
+@page "/admin/vocabulary"
+@attribute [Microsoft.AspNetCore.Authorization.Authorize(Roles = "Admin")]
+@using minutesheet.Data
+@using Microsoft.EntityFrameworkCore
+@inject ApplicationDbContext DbContext
+
+<PageTitle>Vocabulary Management</PageTitle>
+
+<h1>Domain Vocabulary Management</h1>
+<p>Manage the list of domain-specific terms used by the AI correction layer to fix transcription errors.</p>
+
+<div class="card mb-4">
+    <div class="card-header">
+        Add New Term
+    </div>
+    <div class="card-body">
+        <EditForm Model="newTerm" OnValidSubmit="AddTerm">
+            <DataAnnotationsValidator />
+            
+            <div class="row">
+                <div class="col-md-3 mb-3">
+                    <label class="form-label">Category</label>
+                    <InputSelect @bind-Value="newTerm.Category" class="form-select">
+                        @foreach (var cat in Enum.GetValues<VocabularyCategory>())
+                        {
+                            <option value="@cat">@cat</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Term</label>
+                    <InputText @bind-Value="newTerm.Term" class="form-control" placeholder="e.g. Minute Sheet" />
+                    <ValidationMessage For="@(() => newTerm.Term)" />
+                </div>
+                <div class="col-md-4 mb-3">
+                    <label class="form-label">Aliases (comma separated)</label>
+                    <InputText @bind-Value="newTerm.Aliases" class="form-control" placeholder="e.g. Minutesheet, MinuteSheet" />
+                </div>
+                <div class="col-md-1 mb-3 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary w-100">Add</button>
+                </div>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+<div class="table-responsive">
+    <table class="table table-striped table-hover align-middle">
+        <thead class="table-dark">
+            <tr>
+                <th>Category</th>
+                <th>Term</th>
+                <th>Aliases</th>
+                <th>Status</th>
+                <th>Actions</th>
+            </tr>
+        </thead>
+        <tbody>
+            @foreach (var term in terms)
+            {
+                <tr>
+                    <td>@term.Category</td>
+                    <td><strong>@term.Term</strong></td>
+                    <td>@term.Aliases</td>
+                    <td>
+                        @if (term.IsActive)
+                        {
+                            <span class="badge bg-success">Active</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-secondary">Inactive</span>
+                        }
+                    </td>
+                    <td>
+                        <button class="btn btn-sm @(term.IsActive ? "btn-warning" : "btn-success")" 
+                                @onclick="() => ToggleActive(term)">
+                            @(term.IsActive ? "Deactivate" : "Activate")
+                        </button>
+                    </td>
+                </tr>
+            }
+        </tbody>
+    </table>
+</div>
+
+@code {
+    private List<DomainVocabularyTerm> terms = new();
+    private DomainVocabularyTerm newTerm = new() { IsActive = true };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTerms();
+    }
+
+    private async Task LoadTerms()
+    {
+        terms = await DbContext.DomainVocabularyTerms
+            .OrderBy(t => t.Category)
+            .ThenBy(t => t.Term)
+            .ToListAsync();
+    }
+
+    private async Task AddTerm()
+    {
+        if (string.IsNullOrWhiteSpace(newTerm.Term)) return;
+        
+        DbContext.DomainVocabularyTerms.Add(newTerm);
+        await DbContext.SaveChangesAsync();
+        
+        // Reset form
+        newTerm = new DomainVocabularyTerm { IsActive = true };
+        
+        await LoadTerms();
+    }
+
+    private async Task ToggleActive(DomainVocabularyTerm term)
+    {
+        term.IsActive = !term.IsActive;
+        DbContext.DomainVocabularyTerms.Update(term);
+        await DbContext.SaveChangesAsync();
+        await LoadTerms();
+    }
+}

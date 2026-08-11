@@ -5,6 +5,8 @@ using Microsoft.AspNetCore.Mvc;
 using minutesheet.Components;
 using minutesheet.Components.Account;
 using minutesheet.Data;
+using Polly;
+using Polly.Extensions.Http;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -81,10 +83,26 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>>(sp => sp.GetRequire
 builder.Services.AddSingleton<EmailQueue>();
 builder.Services.AddHostedService<EmailBackgroundService>();
 
+builder.Services.AddHttpClient<minutesheet.Services.OpenRouter.IOpenRouterClient, minutesheet.Services.OpenRouter.OpenRouterClient>()
+    .AddPolicyHandler(Polly.Extensions.Http.HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+        .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt))));
+
+builder.Services.AddHttpClient<minutesheet.Services.IGroqTranscriptionService, minutesheet.Services.GroqTranscriptionService>()
+    .AddPolicyHandler(Polly.Extensions.Http.HttpPolicyExtensions
+        .HandleTransientHttpError()
+        .OrResult(msg => msg.StatusCode == System.Net.HttpStatusCode.TooManyRequests)
+        .WaitAndRetryAsync(3, retryAttempt => TimeSpan.FromSeconds(Math.Pow(2, retryAttempt))));
+
 builder.Services.AddScoped<minutesheet.Services.DocumentSummarizationService>();
-builder.Services.AddScoped<minutesheet.Services.SpeechTranscriptionService>();
+builder.Services.AddScoped<minutesheet.Services.ILocalWhisperTranscriptionService, minutesheet.Services.LocalWhisperTranscriptionService>();
 builder.Services.AddSingleton<minutesheet.Services.SheetPdfService>();
 builder.Services.AddScoped<minutesheet.Services.ToastService>();
+
+builder.Services.AddScoped<minutesheet.Services.ITranscriptCorrectionService, minutesheet.Services.TranscriptCorrectionService>();
+builder.Services.AddScoped<minutesheet.Services.ITranslationService, minutesheet.Services.TranslationService>();
+builder.Services.AddScoped<minutesheet.Services.IDictationPipelineService, minutesheet.Services.DictationPipelineService>();
 
 var app = builder.Build();
 
@@ -117,19 +135,12 @@ app.UseAntiforgery();
 app.MapPost("/api/transcriptions", async (
     IFormFile audio,
     [FromForm] string language,
-    minutesheet.Services.SpeechTranscriptionService transcriptionService,
-    minutesheet.Services.DocumentSummarizationService summarizationService,
+    minutesheet.Services.IDictationPipelineService dictationPipelineService,
     CancellationToken cancellationToken) =>
 {
     try
     {
-        var text = await transcriptionService.TranscribeAsync(audio, language, cancellationToken);
-        
-        if (language == "ur-PK" && !string.IsNullOrWhiteSpace(text))
-        {
-            text = await summarizationService.TranslateUrduToEnglishAsync(text);
-        }
-        
+        var text = await dictationPipelineService.ProcessAudioAsync(audio, language, cancellationToken);
         return Results.Ok(new { text });
     }
     catch (ArgumentException exception)

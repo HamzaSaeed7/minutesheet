@@ -4,18 +4,18 @@ using Microsoft.AspNetCore.Components.Forms;
 using UglyToad.PdfPig;
 using DocumentFormat.OpenXml.Packaging;
 
+using minutesheet.Services.OpenRouter;
+
 namespace minutesheet.Services;
 
 public class DocumentSummarizationService
 {
-    private readonly HttpClient _httpClient;
-    private readonly IConfiguration _configuration;
+    private readonly IOpenRouterClient _openRouterClient;
     private readonly ILogger<DocumentSummarizationService> _logger;
 
-    public DocumentSummarizationService(HttpClient httpClient, IConfiguration configuration, ILogger<DocumentSummarizationService> logger)
+    public DocumentSummarizationService(IOpenRouterClient openRouterClient, ILogger<DocumentSummarizationService> logger)
     {
-        _httpClient = httpClient;
-        _configuration = configuration;
+        _openRouterClient = openRouterClient;
         _logger = logger;
     }
 
@@ -93,26 +93,9 @@ public class DocumentSummarizationService
         return $"Category: {category}\nPrepared By: {creatorName}\nDesignation: {creatorDesignation}\nDepartment: {creatorDepartment}\nEmp#: {creatorEmpNo}\n\nDescription:\n{plainText}\n\nAttachment Text:\n{attachmentText}";
     }
 
-    private string GetApiKey(int index)
-    {
-        var key = _configuration[$"OpenRouterSettings:ApiKeys:{index}"];
-        if (!string.IsNullOrWhiteSpace(key)) return key;
-        
-        // Fallback to legacy single-key format if array is missing
-        return _configuration["OpenRouterSettings:ApiKey"] ?? _configuration["GeminiSettings:ApiKey"] ?? string.Empty;
-    }
 
     private async Task<SummaryResult> SummarizeAsync(string documentText)
     {
-        var apiKey = GetApiKey(0);
-        if (string.IsNullOrWhiteSpace(apiKey))
-        {
-            _logger.LogError("AI API Key is not configured in OpenRouterSettings:ApiKey.");
-            return new SummaryResult("Error: AI API Key is not configured. Please add it to your user secrets.", new List<string>(), new List<string>());
-        }
-
-        var url = "https://openrouter.ai/api/v1/chat/completions";
-
         var payload = new
         {
             model = "google/gemma-4-26b-a4b-it:free",
@@ -124,58 +107,18 @@ public class DocumentSummarizationService
             }
         };
 
-        var jsonPayload = JsonSerializer.Serialize(payload);
-        var content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
-
-        try
+        var responseText = await _openRouterClient.SendChatCompletionAsync(0, payload);
+        if (responseText == null)
         {
-            var request = new HttpRequestMessage(HttpMethod.Post, url);
-            request.Headers.Add("Authorization", $"Bearer {apiKey}");
-            request.Headers.Add("HTTP-Referer", "http://localhost:5285");
-            request.Headers.Add("X-Title", "Minute Sheet App");
-            request.Content = content;
-
-            var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            
-            var responseJson = await response.Content.ReadAsStringAsync();
-            _logger.LogInformation("OpenRouter raw response: {ResponseJson}", responseJson);
-            
-            using var doc = JsonDocument.Parse(responseJson);
-            
-            var choice = doc.RootElement.GetProperty("choices")[0];
-            
-            var generatedText = choice
-                .GetProperty("message")
-                .GetProperty("content")
-                .GetString();
-
-            if (choice.TryGetProperty("finish_reason", out var finishReasonProp))
-            {
-                var finishReason = finishReasonProp.GetString();
-                if (finishReason == "content_filter")
-                {
-                    return new SummaryResult("Error: The document text was flagged by the AI safety filter. Please review the content.", new List<string>(), new List<string>());
-                }
-            }
-
-            // Fallback check in case the model returns safety strings directly in the content
-            if (!string.IsNullOrWhiteSpace(generatedText) && generatedText.Trim().StartsWith("User Safety:"))
-            {
-                return new SummaryResult("Error: The document text was flagged by the AI safety filter. Please review the content.", new List<string>(), new List<string>());
-            }
-
-            return ParseSummaryResult(generatedText);
+            return new SummaryResult("Error: AI API Key is not configured. Please add it to your user secrets.", new List<string>(), new List<string>());
         }
-        catch (HttpRequestException httpEx) when (httpEx.StatusCode == System.Net.HttpStatusCode.TooManyRequests)        {
-            _logger.LogWarning(httpEx, "AI API rate limit reached (429)");
-            return new SummaryResult("Error: AI service rate limit reached (429). Please try again in a moment or check your API quota.", new List<string>(), new List<string>());
-        }
-        catch (Exception ex)
+
+        if (responseText.StartsWith("Error:"))
         {
-            _logger.LogError(ex, "Failed to call AI API");
-            return new SummaryResult("Error: Failed to generate summary from AI service.", new List<string>(), new List<string>());
+            return new SummaryResult(responseText, new List<string>(), new List<string>());
         }
+
+        return ParseSummaryResult(responseText);
     }
 
     /// <summary>
@@ -240,14 +183,6 @@ public class DocumentSummarizationService
 
     public async Task<string> ExtractActionItemsAsync(string documentText)
     {
-        var apiKey = GetApiKey(1);
-        if (string.IsNullOrEmpty(apiKey))
-        {
-            return "{\"error\": \"AI API Key is not configured.\"}";
-        }
-
-        var url = "https://openrouter.ai/api/v1/chat/completions";
-
         var payload = new
         {
             model = "google/gemma-4-26b-a4b-it:free",
@@ -259,45 +194,16 @@ public class DocumentSummarizationService
             }
         };
 
-        var jsonPayload = JsonSerializer.Serialize(payload);
-        var content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
+        var responseText = await _openRouterClient.SendChatCompletionAsync(1, payload);
+        if (responseText == null) return "{\"error\": \"AI API Key is not configured.\"}";
+        
+        if (responseText.StartsWith("Error:")) return $"{{\"error\": \"{responseText}\"}}";
 
-        try
-        {
-            var request = new HttpRequestMessage(HttpMethod.Post, url);
-            request.Headers.Add("Authorization", $"Bearer {apiKey}");
-            request.Headers.Add("HTTP-Referer", "http://localhost:5285");
-            request.Headers.Add("X-Title", "Minute Sheet App");
-            request.Content = content;
-
-            var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            
-            var responseJson = await response.Content.ReadAsStringAsync();
-            _logger.LogInformation("OpenRouter raw response (action items): {ResponseJson}", responseJson);
-            
-            using var doc = JsonDocument.Parse(responseJson);
-            var generatedText = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
-
-            return CleanJsonString(generatedText) ?? "{\"action_items\": []}";
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to call AI API for action item extraction");
-            return "{\"error\": \"Failed to extract action items.\"}";
-        }
+        return CleanJsonString(responseText) ?? "{\"action_items\": []}";
     }
 
     public async Task<string> GenerateAgendaAsync(string documentText)
     {
-        var apiKey = GetApiKey(2);
-        if (string.IsNullOrEmpty(apiKey))
-        {
-            return "{\"error\": \"AI API Key is not configured.\"}";
-        }
-
-        var url = "https://openrouter.ai/api/v1/chat/completions";
-
         var payload = new
         {
             model = "google/gemma-4-26b-a4b-it:free",
@@ -309,45 +215,16 @@ public class DocumentSummarizationService
             }
         };
 
-        var jsonPayload = JsonSerializer.Serialize(payload);
-        var content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
+        var responseText = await _openRouterClient.SendChatCompletionAsync(2, payload);
+        if (responseText == null) return "{\"error\": \"AI API Key is not configured.\"}";
 
-        try
-        {
-            var request = new HttpRequestMessage(HttpMethod.Post, url);
-            request.Headers.Add("Authorization", $"Bearer {apiKey}");
-            request.Headers.Add("HTTP-Referer", "http://localhost:5285");
-            request.Headers.Add("X-Title", "Minute Sheet App");
-            request.Content = content;
+        if (responseText.StartsWith("Error:")) return $"{{\"error\": \"{responseText}\"}}";
 
-            var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            
-            var responseJson = await response.Content.ReadAsStringAsync();
-            _logger.LogInformation("OpenRouter raw response (agenda): {ResponseJson}", responseJson);
-            
-            using var doc = JsonDocument.Parse(responseJson);
-            var generatedText = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
-
-            return CleanJsonString(generatedText) ?? "{\"agenda_items\": []}";
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to call AI API for agenda generation");
-            return "{\"error\": \"Failed to generate agenda.\"}";
-        }
+        return CleanJsonString(responseText) ?? "{\"agenda_items\": []}";
     }
 
     public async Task<string> TranslateUrduToEnglishAsync(string urduText)
     {
-        var apiKey = GetApiKey(3);
-        if (string.IsNullOrEmpty(apiKey))
-        {
-            return "Error: AI API Key is not configured.";
-        }
-
-        var url = "https://openrouter.ai/api/v1/chat/completions";
-
         var payload = new
         {
             model = "google/gemma-4-26b-a4b-it:free",
@@ -358,33 +235,10 @@ public class DocumentSummarizationService
             }
         };
 
-        var jsonPayload = JsonSerializer.Serialize(payload);
-        var content = new StringContent(jsonPayload, System.Text.Encoding.UTF8, "application/json");
+        var responseText = await _openRouterClient.SendChatCompletionAsync(3, payload);
+        if (responseText == null) return "Error: AI API Key is not configured.";
 
-        try
-        {
-            var request = new HttpRequestMessage(HttpMethod.Post, url);
-            request.Headers.Add("Authorization", $"Bearer {apiKey}");
-            request.Headers.Add("HTTP-Referer", "http://localhost:5285");
-            request.Headers.Add("X-Title", "Minute Sheet App");
-            request.Content = content;
-
-            var response = await _httpClient.SendAsync(request);
-            response.EnsureSuccessStatusCode();
-            
-            var responseJson = await response.Content.ReadAsStringAsync();
-            _logger.LogInformation("OpenRouter raw response (translation): {ResponseJson}", responseJson);
-            
-            using var doc = JsonDocument.Parse(responseJson);
-            var generatedText = doc.RootElement.GetProperty("choices")[0].GetProperty("message").GetProperty("content").GetString();
-
-            return generatedText?.Trim() ?? string.Empty;
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Failed to call AI API for translation");
-            return $"[Translation Error: {ex.Message}]";
-        }
+        return responseText.Trim();
     }
     private static string? CleanJsonString(string? input)
     {
