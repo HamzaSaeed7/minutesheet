@@ -63,17 +63,17 @@ else
             {
                 var sheet = step.MinuteSheet!;
                 <div class="act-row" style="grid-template-columns:1.5fr 1.3fr 1.3fr 1fr 1fr 90px;">
-                    <div style="font-weight:600;color:var(--ink-strong);">@sheet.Title</div>
-                    <div>@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
-                    <div>
+                    <div data-label="Title" style="font-weight:600;color:var(--ink-strong);">@sheet.Title</div>
+                    <div data-label="Date">@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
+                    <div data-label="From">
                         <div class="act-user">
                             <span class="min-avatar" style="background:@AvatarColor(sheet)">@AvatarInitials(sheet)</span>
                             <span>@CreatorName(sheet)</span>
                         </div>
                     </div>
-                    <div style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
-                    <div><span class="badge @StepStatusClass(step.Status)">@DisplayName(step.Status)</span></div>
-                    <div><a class="btn btn-sm btn-primary" href="dashboard/sheet/@sheet.Token">Open</a></div>
+                    <div data-label="Category" style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
+                    <div data-label="Your status"><span class="badge @StepStatusClass(step.Status)">@DisplayName(step.Status)</span></div>
+                    <div data-label=""><a class="btn btn-sm btn-primary" href="dashboard/sheet/@sheet.Token">Open</a></div>
                 </div>
             }
         }
@@ -94,11 +94,11 @@ else
             {
                 var count = sheet.ApprovalSteps.Count(s => s.Status == ApprovalStepStatus.Reviewed);
                 <div class="act-row" style="grid-template-columns:1.5fr 1.5fr 1fr 1fr 90px;">
-                    <div style="font-weight:600;color:var(--ink-strong);">@sheet.Title</div>
-                    <div>@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
-                    <div style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
-                    <div><span class="badge bg-warning">@count</span></div>
-                    <div><a class="btn btn-sm btn-primary" href="dashboard/sheet/@sheet.Token">Open</a></div>
+                    <div data-label="Title" style="font-weight:600;color:var(--ink-strong);">@sheet.Title</div>
+                    <div data-label="Date">@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
+                    <div data-label="Category" style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
+                    <div data-label="Reviews to resolve"><span class="badge bg-warning">@count</span></div>
+                    <div data-label=""><a class="btn btn-sm btn-primary" href="dashboard/sheet/@sheet.Token">Open</a></div>
                 </div>
             }
         }
@@ -119,11 +119,11 @@ else
             {
                 var sheet = share.MinuteSheet!;
                 <div class="act-row" style="grid-template-columns:1.3fr 1.3fr 1fr 1fr 90px;">
-                    <div>@share.SharedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
-                    <div style="color:#565b78;">@SharerName(share)</div>
-                    <div style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
-                    <div><span class="badge @(sheet.IsConfidential ? "bg-danger" : "bg-secondary")">@(sheet.IsConfidential ? "Confidential" : "Non-confidential")</span></div>
-                    <div><a class="btn btn-sm btn-primary" href="dashboard/sheet/@sheet.Token">Open</a></div>
+                    <div data-label="Shared">@share.SharedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
+                    <div data-label="From" style="color:#565b78;">@SharerName(share)</div>
+                    <div data-label="Category" style="color:#565b78;">@(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")</div>
+                    <div data-label="Visibility"><span class="badge @(sheet.IsConfidential ? "bg-danger" : "bg-secondary")">@(sheet.IsConfidential ? "Confidential" : "Non-confidential")</span></div>
+                    <div data-label=""><a class="btn btn-sm btn-primary" href="dashboard/sheet/@sheet.Token">Open</a></div>
                 </div>
             }
         }

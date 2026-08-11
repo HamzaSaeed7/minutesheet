@@ -46,7 +46,7 @@ else
     <a href="dashboard/history" class="back-link">&larr; Back to history</a>
 
     <div class="content-card mb-4">
-        <div class="d-flex align-items-center gap-3 mb-3">
+        <div class="d-flex align-items-center gap-3 mb-3 sheet-head">
             <div class="sheet-avatar">
                 @if (!string.IsNullOrEmpty(_sheet.CreatedByUser?.AvatarPath))
                 {
@@ -57,28 +57,30 @@ else
                     @Initials(_sheet.CreatedByUser?.FullName, _sheet.CreatedByUser?.Email)
                 }
             </div>
-            <div style="flex:1;min-width:0;">
+            <div class="sheet-creator">
                 <div class="creator-label">Prepared by</div>
                 <div class="creator-name">@(string.IsNullOrWhiteSpace(_sheet.CreatedByUser?.FullName) ? _sheet.CreatedByUser?.Email : _sheet.CreatedByUser!.FullName)</div>
                 <div class="creator-meta">@CreatorMeta()</div>
             </div>
-            @if (_canEdit)
-            {
-                <a href="dashboard/sheet/@Token/edit" class="btn btn-outline-primary btn-sm">Edit</a>
-            }
-            @if (_isCreator || _isApprover || _isAdmin)
-            {
-                <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenShare">Share</button>
-            }
-            @if (_isCreator)
-            {
-                <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="DeleteSheet">Delete</button>
-            }
-            @if (_sheet.IsConfidential)
-            {
-                <span class="badge bg-danger" style="font-size:13px;padding:6px 16px;" title="Only the creator, listed approvers and admins can view this sheet.">Confidential</span>
-            }
-            <span class="badge @SheetStatusClass(_currentStatus)" style="font-size:13px;padding:6px 16px;">@_currentStatus</span>
+            <div class="sheet-actions">
+                @if (_canEdit)
+                {
+                    <a href="dashboard/sheet/@Token/edit" class="btn btn-outline-primary btn-sm">Edit</a>
+                }
+                @if (_isCreator || _isApprover || _isAdmin)
+                {
+                    <button type="button" class="btn btn-outline-secondary btn-sm" @onclick="OpenShare">Share</button>
+                }
+                @if (_isCreator)
+                {
+                    <button type="button" class="btn btn-outline-danger btn-sm" disabled="@_busy" @onclick="DeleteSheet">Delete</button>
+                }
+                @if (_sheet.IsConfidential)
+                {
+                    <span class="badge bg-danger" style="font-size:13px;padding:6px 16px;" title="Only the creator, listed approvers and admins can view this sheet.">Confidential</span>
+                }
+                <span class="badge @SheetStatusClass(_currentStatus)" style="font-size:13px;padding:6px 16px;">@_currentStatus</span>
+            </div>
         </div>
 
         <div class="d-flex flex-wrap" style="gap:28px;padding:18px 0;border-top:1px solid #f0f1f7;border-bottom:1px solid #f0f1f7;margin-bottom:18px;">

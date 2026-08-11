@@ -166,7 +166,7 @@ else
                                 var tot = sheet.ApprovalSteps.Count;
                                 var pct = tot > 0 ? (int)Math.Round(done * 100.0 / tot) : 0;
                                 <tr>
-                                    <td>
+                                    <td data-label="Sheet">
                                         <div class="as-sheet-title">
                                             @(string.IsNullOrWhiteSpace(sheet.Title) ? "Untitled sheet" : sheet.Title)
                                             @if (sheet.IsConfidential)
@@ -176,7 +176,7 @@ else
                                         </div>
                                         <div class="as-sheet-meta">@sheet.CreatedAt.ToLocalTime().ToString("dd MMM yyyy, HH:mm")</div>
                                     </td>
-                                    <td>
+                                    <td data-label="Creator">
                                         <div class="avatar-wrap">
                                             <span class="avatar-mini">@Initials(creatorName)</span>
                                             <span>
@@ -185,23 +185,23 @@ else
                                             </span>
                                         </div>
                                     </td>
-                                    <td>
+                                    <td data-label="Category">
                                         <span class="cat-chip @(sheet.Category == SheetCategory.NonFinancial ? "cat-nonfin" : "cat-fin")">
                                             @(sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial")
                                         </span>
                                     </td>
-                                    <td>
+                                    <td data-label="Status">
                                         <span class="status-pill @(status == "Approved" ? "status-ok" : status == "Review" ? "status-review" : "status-wait")">
                                             @(status == "Review" ? "In Review" : status)
                                         </span>
                                     </td>
-                                    <td>
+                                    <td data-label="Approvals">
                                         <div class="h-progress">
                                             <span class="h-progress-bar"><span class="h-progress-fill" style="width:@(pct)%"></span></span>
                                             <span class="h-progress-count">@done / @tot</span>
                                         </div>
                                     </td>
-                                    <td class="text-end">
+                                    <td data-label="Actions" class="text-end">
                                         <div class="d-inline-flex align-items-center gap-2">
                                             @if (editable)
                                             {
