@@ -9,6 +9,8 @@
     align-items: center;
     gap: 10px;
     padding: 24px 22px 20px 22px;
+    position: relative;
+    z-index: 1050;
 }
 
 .sb-logo {
@@ -168,7 +170,7 @@
 
     .sb-logout:hover { color: #fff; }
 
-/* Mobile toggler */
+/* Mobile & tablet toggler (320 / 375 / 425 / 768 px) */
 .navbar-toggler {
     appearance: none;
     cursor: pointer;
@@ -184,7 +186,30 @@
 }
 
 .nav-scrollable { display: none; }
-.navbar-toggler:checked ~ .nav-scrollable { display: flex; }
+
+@media (max-width: 991.98px) {
+    .navbar-toggler {
+        position: fixed;
+        z-index: 1051;
+    }
+
+    .sb-fold {
+        display: none !important;
+    }
+
+    .navbar-toggler:checked ~ .nav-scrollable {
+        display: flex;
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        z-index: 1049;
+        background: #14173a;
+        overflow: hidden;
+        padding: 90px 0 0 0;
+    }
+}
 
 @media (min-width: 992px) {
     .navbar-toggler { display: none; }

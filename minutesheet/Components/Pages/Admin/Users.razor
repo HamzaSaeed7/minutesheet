@@ -147,7 +147,7 @@ else
                             @foreach (var row in _pagedRows)
                             {
                                 <tr>
-                                    <td>
+                                    <td data-label="User">
                                         <div class="avatar-wrap">
                                             <span class="avatar-mini">@Initials(DisplayName(row))</span>
                                             <span>
@@ -156,21 +156,21 @@ else
                                             </span>
                                         </div>
                                     </td>
-                                    <td>
+                                    <td data-label="Employee No.">
                                         <span class="as-mono">@(string.IsNullOrWhiteSpace(row.User.EmployeeNo) ? "—" : row.User.EmployeeNo)</span>
                                     </td>
-                                    <td>
+                                    <td data-label="Designation">
                                         <span class="as-text-muted">@DesignationName(row.User.Designation)</span>
                                     </td>
-                                    <td>
+                                    <td data-label="Department">
                                         <span class="as-text">@(row.User.Department?.Name ?? "—")</span>
                                     </td>
-                                    <td>
+                                    <td data-label="Role">
                                         <span class="role-chip @(row.IsAdmin ? "role-admin" : "role-employee")">
                                             @(row.IsAdmin ? Roles.Admin : Roles.Employee)
                                         </span>
                                     </td>
-                                    <td class="text-end">
+                                    <td data-label="Actions" class="text-end">
                                         <div class="d-inline-flex align-items-center gap-2">
                                             <a class="btn btn-sm btn-outline-secondary" href="@($"admin/users/{row.User.Id}/edit")">Edit</a>
                                             @if (row.IsSelf)

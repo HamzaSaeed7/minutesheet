@@ -151,6 +151,12 @@
         .sb.sb-collapsed .sb-logout span {
             display: none;
         }
+
+    @@media (max-width: 991.98px) {
+        body:has(.navbar-toggler:checked) {
+            overflow: hidden !important;
+        }
+    }
 </style>
 
 <div class="sb @(_collapsed ? "sb-collapsed" : "")">

@@ -29,6 +29,7 @@ public sealed class ToastService
 
     private readonly object _lock = new();
     private readonly List<ToastItem> _items = new();
+    private bool _statusMessageConsumed;
 
     public event Action? OnChange;
 
@@ -80,6 +81,25 @@ public sealed class ToastService
             _items.Clear();
         }
         Notify();
+    }
+
+    /// <summary>
+    /// Atomically claims the redirect status message so that when multiple
+    /// <c>ToastHost</c> instances render in the same circuit/request (e.g. a
+    /// shared layout plus a page-level host), the login/redirect cookie is
+    /// surfaced as exactly ONE toast instead of once per host.
+    /// </summary>
+    public bool TryConsumeStatusMessage()
+    {
+        lock (_lock)
+        {
+            if (_statusMessageConsumed)
+            {
+                return false;
+            }
+            _statusMessageConsumed = true;
+            return true;
+        }
     }
 
     // Never let a subscriber failure break the caller (e.g. a Save() handler).

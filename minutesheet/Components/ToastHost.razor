@@ -37,10 +37,13 @@
         // During static (non-interactive) rendering, surface a message carried
         // across a redirect by IdentityRedirectManager.RedirectToWithStatus, e.g.
         // after login or account verification lands back on a dashboard page.
+        // TryConsumeStatusMessage() ensures that only ONE host (of the several
+        // that may render in the same request, such as a layout + page host)
+        // turns the cookie into a toast, so the user never sees duplicates.
         if (HttpContext is not null)
         {
             var raw = HttpContext.Request.Cookies[IdentityRedirectManager.StatusCookieName];
-            if (!string.IsNullOrEmpty(raw))
+            if (!string.IsNullOrEmpty(raw) && ToastService.TryConsumeStatusMessage())
             {
                 HttpContext.Response.Cookies.Delete(IdentityRedirectManager.StatusCookieName);
                 var toast = Parse(raw);

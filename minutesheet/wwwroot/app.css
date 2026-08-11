@@ -437,10 +437,11 @@ a, .btn-link {
 .history-list { }
 
 .history-row {
-    display: flex;
+    display: grid;
+    grid-template-columns: auto minmax(0, 1fr) auto;
     align-items: center;
-    gap: 18px;
-    padding: 18px 22px;
+    gap: 16px 18px;
+    padding: 16px 22px;
     border-bottom: 1px solid var(--divider);
     transition: background .15s ease;
 }
@@ -448,13 +449,13 @@ a, .btn-link {
 .history-row:last-child { border-bottom: none; }
 
 .history-date {
-    flex: 0 0 auto;
     width: 64px; height: 64px;
     border-radius: 13px;
     background: var(--brand-tint);
     border: 1px solid #dde0f5;
     display: flex; flex-direction: column; align-items: center; justify-content: center;
     color: var(--brand);
+    text-align: center;
 }
 .hd-day { font-family: 'Poppins', sans-serif; font-size: 21px; font-weight: 700; line-height: 1; color: var(--brand); }
 .hd-mon { font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .05em; margin-top: 3px; color: var(--brand); }
@@ -480,7 +481,7 @@ a, .btn-link {
 .h-progress-fill { display: block; height: 100%; border-radius: 5px; background: var(--brand); }
 .h-progress-count { font-size: 12px; color: #565b78; font-weight: 500; }
 
-.history-actions { flex: 0 0 auto; display: flex; gap: 8px; }
+.history-actions { display: flex; gap: 8px; align-items: center; }
 .hist-btn { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; border-radius: 9px; font-size: 13px; font-weight: 600; text-decoration: none; border: 1px solid transparent; cursor: pointer; transition: all .15s ease; }
 .btn-open { background: var(--brand); color: #fff; }
 .btn-open:hover { background: var(--brand-dark); color: #fff; text-decoration: none; }
@@ -666,6 +667,10 @@ a, .btn-link {
     text-transform: uppercase;
 }
 .sheet-avatar img { width: 100%; height: 100%; object-fit: cover; }
+
+.sheet-head { flex-wrap: wrap; row-gap: 12px; }
+.sheet-creator { flex: 1 1 0; min-width: 0; }
+.sheet-actions { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; flex: 0 0 auto; margin-left: auto; }
 
 /* ---------- Approval timeline (SheetView) ---------- */
 .timeline { display: flex; flex-direction: column; }
@@ -1511,13 +1516,54 @@ body {
 
 @media (max-width: 1199.98px) {
     .page-container { padding-left: 28px; padding-right: 28px; }
+
+    /* Laptop: let admin tables shrink to fit instead of overflowing the 920px min.
+       Keep avatar name/email on ONE line (truncate) so All Sheets creator and
+       Manage Users names don't break vertically. */
+    .as-table-wrap .table { min-width: 0; }
+    .as-table-wrap { overflow-x: auto; }
+    .as-table-wrap .table tbody td .avatar-wrap > span:last-child { min-width: 0; }
+    .as-table-wrap .table tbody td .avatar-name,
+    .as-table-wrap .table tbody td .avatar-mail,
+    .as-table-wrap .table tbody td .as-user-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+    .as-table-wrap .table tbody td .h-progress-bar { width: 90px; }
+
+    /* Department add-bar fits on laptop without overflowing */
+    .as-add { align-items: center; }
+    .as-add input { flex: 1 1 220px; max-width: 360px; }
+}
+
+/* Department page only: fill the full width at narrow desktop widths so
+   there is no empty space on the right of the desktop-style table. */
+@media (max-width: 1199.98px) {
+    .history-card:has(.as-add) .as-table-wrap,
+    .history-card:has(.as-add) .as-table-wrap .table { width: 100%; }
+    .history-card:has(.as-add) .as-table-wrap .table td, 
+    .history-card:has(.as-add) .as-table-wrap .table th { padding-left: 14px; padding-right: 14px; }
 }
 
 /* ---------- Tablet and below (also covers 768px) ---------- */
 @media (max-width: 991.98px) {
     /* Actions grid: collapse the 5/4-column grids into 2 columns */
     .act-head,
-    .act-row { grid-template-columns: 1fr 1fr !important; gap: 12px 18px; }
+    .act-row { grid-template-columns: 1fr 1fr !important; gap: 10px 18px; }
+
+    /* Actions rows become labeled two-column cards below desktop */
+    .act-head { display: none !important; }
+    .act-row > * { padding: 0; }
+    .act-row > [data-label] { display: flex; flex-direction: column; gap: 3px; }
+    .act-row > [data-label]::before {
+        content: attr(data-label);
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted-2);
+    }
+    .act-row > [data-label="Title"]::before { display: none; }
+    .act-row > [data-label="Title"] { grid-column: 1 / -1; }
+    .act-row > [data-label=""] { grid-column: 1 / -1; margin-top: 4px; }
+    .act-row > [data-label=""] .btn { width: 100%; }
 
     /* Data tables become horizontally scrollable within their own card */
     .table,
@@ -1533,10 +1579,10 @@ body {
     /* History rows become tidy two-line cards on tablets: the date chip and
        content sit on the first line, the action buttons align to the right
        beneath a subtle divider — a clean, consistent "inbox" row. */
-    .history-row { flex-wrap: wrap; gap: 10px 18px; padding: 16px 18px; }
-    .history-date { align-self: flex-start; width: 56px; height: 56px; }
-    .history-body { flex: 1 1 240px; min-width: 0; }
-    .history-actions { width: 100%; margin-left: 0; flex-wrap: wrap;
+    .history-row { grid-template-columns: auto minmax(0, 1fr); gap: 12px 16px; padding: 16px 18px; }
+    .history-date { align-self: start; width: 54px; height: 54px; }
+    .history-body { grid-column: 2; min-width: 0; }
+    .history-actions { grid-column: 1 / -1; margin-left: 0; flex-wrap: wrap;
                        justify-content: flex-end; padding-top: 12px;
                        border-top: 1px solid var(--divider); }
     .history-toolbar { padding: 14px; }
@@ -1610,8 +1656,28 @@ body {
 
     /* Actions: single-column stacked cards (hide the column headers) */
     .act-head { display: none !important; }
-    .act-row { grid-template-columns: 1fr !important; padding: 14px 18px; gap: 6px; }
-    .act-row > * { padding: 2px 0; }
+    .act-row {
+        grid-template-columns: 1fr !important;
+        gap: 8px;
+        padding: 16px;
+    }
+    .act-row > * { padding: 0; }
+    .act-row > [data-label] {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+    }
+    .act-row > [data-label]::before {
+        content: attr(data-label);
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted-2);
+    }
+    .act-row > [data-label="Title"]::before { display: none; }
+    .act-row > [data-label=""] { margin-top: 4px; }
+    .act-row > [data-label=""] .btn { width: 100%; }
 
     /* Wrap common inline flex rows so nothing overflows sideways */
     .content-card > .d-flex.gap-2,
@@ -1626,9 +1692,412 @@ body {
     .as-stat-value { font-size: 20px; }
 }
 
-/* ==========================================================================
-   Sidebar Collapse Styling
-   ========================================================================== */
+/* ---------- Tablet (768px) ---------- */
+@media (max-width: 767.98px) {
+    /* Kill sideways scroll at the page level on tablets */
+    .page, main, .content, .page-container { overflow-x: hidden; }
+
+    /* Create page: side panel stacks below and aligns with the main column */
+    .create-grid { gap: 18px; }
+    .create-col { gap: 16px; }
+
+    /* Settings grid: single column on tablets */
+    .settings-grid { grid-template-columns: 1fr; }
+
+    /* Stat cards: 2 columns on tablet */
+    .stat-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+
+    /* QA quick-access cards: 2 columns on tablet */
+    .qa-grid { grid-template-columns: repeat(2, 1fr); gap: 14px; }
+
+    /* Admin stat cards: 2 columns on tablet */
+    .as-stats { grid-template-columns: repeat(2, 1fr); }
+
+    /* Admin tables: allow columns to shrink instead of forcing 920px scroll */
+    .as-table-wrap { overflow: visible; }
+    .as-table-wrap .table { min-width: 0; overflow: visible; }
+    .as-table-wrap .table thead { display: none; }
+    .as-table-wrap .table tbody { display: block; }
+    .as-table-wrap .table tbody tr {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 4px 20px;
+        padding: 14px 16px;
+        border-bottom: 1px solid var(--divider);
+        border-radius: 12px;
+    }
+    .as-table-wrap .table tbody tr:last-child { border-bottom: none; }
+    .as-table-wrap .table tbody td {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        padding: 6px 0;
+        border: none;
+        min-width: 0;
+        white-space: normal;
+    }
+    .as-table-wrap .table tbody td[data-label]::before {
+        content: attr(data-label);
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted-2);
+    }
+    .as-table-wrap .table tbody td[data-label="Actions"] {
+        grid-column: 1 / -1;
+        align-items: flex-start;
+        margin-top: 4px;
+    }
+    .as-table-wrap .table tbody td[data-label="Actions"] .d-inline-flex { flex-wrap: wrap; }
+
+    /* Keep text cells from overflowing / scrolling on tablet */
+    .as-table-wrap .table tbody td { min-width: 0; max-width: 100%; }
+    .as-table-wrap .table tbody td .avatar-wrap { min-width: 0; }
+    .as-table-wrap .table tbody td .avatar-wrap > span:last-child,
+    .as-table-wrap .table tbody td > div,
+    .as-table-wrap .table tbody td > span { min-width: 0; max-width: 100%; }
+    .as-table-wrap .table tbody td .avatar-mail { word-break: break-word; }
+    .as-table-wrap .table tbody td .as-sheet-title { min-width: 0; justify-content: flex-start; }
+    .as-table-wrap .table tbody td .h-progress { min-width: 0; flex-wrap: wrap; }
+    .as-table-wrap .table tbody td .h-progress-bar { flex: 0 0 auto; width: 90px; }
+    .as-table-wrap .table tbody td .avatar-mail { white-space: normal; }
+    .as-table-wrap .table tbody td .as-mono,
+    .as-table-wrap .table tbody td .as-text,
+    .as-table-wrap .table tbody td .as-text-muted { white-space: normal; word-break: break-word; }
+    .as-table-wrap .table tbody td .as-user-name,
+    .as-table-wrap .table tbody td .avatar-name {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 100%;
+    }
+    .as-table-wrap .table tbody td .avatar-mail { word-break: break-word; }
+
+    /* Segmented rows: stack to one column on tablet */
+    .seg-row { grid-template-columns: 1fr; }
+
+    /* Page heading: keep comfortable margins */
+    .page-title { font-size: 22px; margin-bottom: 16px; }
+
+    /* Department page: add-bar + filters stack cleanly on tablet */
+    .as-toolbar { padding: 14px; }
+    .as-add { width: 100%; }
+    .as-add input { flex: 1 1 auto; max-width: 100%; }
+    .as-filter-row { width: 100%; }
+
+    /* Forms: give inputs a comfortable tap target */
+    .form-control, .form-select { font-size: 16px; }}
+
+/* ---------- Mobile (425px / 375px / 320px) ---------- */
+@media (max-width: 575.98px) {
+    /* Kill sideways scroll at the page level on phones */
+    .page, main, .content, .page-container { overflow-x: hidden; }
+
+    /* Admin tables: no internal scroll on phones, force wrap instead */
+    .as-table-wrap { overflow: visible; }
+    .as-table-wrap .table { overflow: visible; }
+
+    /* Card padding: more compact */
+    .content-card { padding: 16px; }
+
+    /* Stat cards: single column on phones */
+    .stat-grid { grid-template-columns: 1fr; }
+    .qa-grid { grid-template-columns: 1fr; }
+
+    /* Admin stats: single column on phones */
+    .as-stats { grid-template-columns: 1fr; }
+
+    /* Admin stat cards: tighten for small phones */
+    .as-stat { padding: 13px; gap: 12px; border-radius: 12px; }
+    .as-stat-icon { width: 38px; height: 38px; }
+    .as-stat-value { font-size: 21px; }
+
+    /* Admin tables: single-column stacked cards on phones */
+    .as-table-wrap { overflow: visible; }
+    .as-table-wrap .table,
+    .as-table-wrap .table * { max-width: 100%; }
+    .as-table-wrap .table tbody { display: block; }
+    .as-table-wrap .table tbody tr {
+        display: grid;
+        grid-template-columns: 1fr;
+        gap: 6px;
+        padding: 16px 16px;
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        margin-bottom: 12px;
+        background: var(--card);
+    }
+    .as-table-wrap .table tbody tr:last-child { margin-bottom: 0; }
+    .as-table-wrap .table tbody td {
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        padding: 4px 0;
+        min-width: 0;
+        max-width: 100%;
+    }
+    .as-table-wrap .table tbody td[data-label]::before {
+        content: attr(data-label);
+        font-size: 10.5px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        color: var(--muted-2);
+    }
+    .as-table-wrap .table tbody td .as-sheet-title,
+    .as-table-wrap .table tbody td .avatar-wrap,
+    .as-table-wrap .table tbody td .h-progress,
+    .as-table-wrap .table tbody td .dept-count {
+        flex-wrap: wrap;
+        min-width: 0;
+        width: 100%;
+    }
+    .as-table-wrap .table tbody td .avatar-mail,
+    .as-table-wrap .table tbody td .as-user-name,
+    .as-table-wrap .table tbody td .avatar-name,
+    .as-table-wrap .table tbody td .as-sheet-title,
+    .as-table-wrap .table tbody td .as-mono,
+    .as-table-wrap .table tbody td .as-text,
+    .as-table-wrap .table tbody td .as-text-muted {
+        white-space: normal;
+        word-break: break-word;
+    }
+    .as-table-wrap .table tbody td .h-progress-bar { width: 100%; max-width: 140px; }
+    .as-table-wrap .table tbody td .h-progress-count { white-space: nowrap; }
+    .as-table-wrap .table tbody td .conf-chip { white-space: nowrap; }
+    .as-table-wrap .table tbody td[data-label="Actions"] {
+        align-items: center;
+        flex-direction: row;
+        flex-wrap: wrap;
+        column-gap: 12px;
+        row-gap: 6px;
+    }
+    .as-table-wrap .table tbody td[data-label="Actions"]::before {
+        flex: 0 0 auto;
+        margin: 0;
+    }
+    .as-table-wrap .table tbody td[data-label="Actions"] .d-inline-flex {
+        width: auto;
+        flex: 1 1 auto;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 8px;
+    }
+    .as-table-wrap .table tbody td[data-label="Actions"] .btn { flex: 0 0 auto; justify-content: center; white-space: nowrap; }
+    .as-table-wrap .table tbody td:not([data-label="Actions"]) .avatar-mail { word-break: break-word; }
+
+    /* Admin toolbar / filters: stack full width on phones */
+    .as-toolbar { padding: 12px; }
+    .as-toolbar-search { flex-direction: column; align-items: stretch; }
+    .as-toolbar-search .ht-search { flex: 1 1 auto; width: 100%; min-width: 0; }
+    .as-toolbar-search .ht-clear { width: 100%; }
+    .as-filter-row { flex-direction: column; align-items: stretch; }
+    .as-filter-row .ht-select,
+    .as-filter-row .ht-date-range,
+    .as-filter-row .ht-date-group { width: 100%; }
+    .ht-date-range { flex-direction: column; align-items: stretch; }
+    .ht-date-range .ht-date { width: 100%; }
+
+    /* Department add-bar stacks on phones */
+    .as-add { flex-direction: column; align-items: stretch; }
+    .as-add input { max-width: none; flex: 1 1 auto; }
+    .as-add .btn { width: 100%; }
+
+    /* Admin pagination stacks on phones */
+    .as-pagination { flex-direction: column; align-items: stretch; gap: 10px; }
+    .as-pagination .pgn-count { flex: 1 1 auto; order: 0; text-align: center; }
+    .as-pagination .pgn-btn:first-of-type { order: 1; }
+    .as-pagination .pgn-pages { order: 2; justify-content: center; }
+    .as-pagination .pgn-btn:last-of-type { order: 3; }
+    .as-perpage { order: 4; justify-content: center; }
+    .as-perpage .ht-select { width: auto; }
+
+    /* Page header buttons wrap */
+    .d-flex.align-items-center.justify-content-between.flex-wrap.gap-3 .btn { white-space: nowrap; }
+
+    /* Bottom action bars on create/edit/sheet pages stack full width */
+    .d-flex.justify-content-end.gap-2,
+    .d-flex.justify-content-end[style*="gap:10px"],
+    .d-flex.justify-content-between.mb-3 {
+        flex-direction: column;
+        align-items: stretch;
+    }
+    .d-flex.justify-content-end.gap-2 .btn,
+    .d-flex.justify-content-end[style*="gap:10px"] .btn,
+    .btn-cancel,
+    .d-flex.justify-content-end .btn-primary {
+        width: 100%;
+        justify-content: center;
+    }
+
+    /* Workflow rows stack fully; fixed-width chips become full width */
+    .wf-row { flex-direction: column; align-items: stretch; gap: 8px; padding: 12px; background: #fafafd; border-radius: 10px; }
+    .wf-row .wf-num { align-self: flex-start; }
+    .wf-row .wf-chip, .wf-row .wf-action, .wf-row .wf-approver, .wf-row .wf-count { width: 100%; flex-basis: auto; }
+    .wf-row .wf-remove { align-self: flex-end; }
+
+    /* Locked workflow steps stack too */
+    .content-card .wf-row { flex-direction: column; align-items: stretch; }
+
+    /* Description / dictation header wraps neatly */
+    .content-card .d-flex.align-items-center.justify-content-between,
+    .content-card .d-flex.align-items-center[style*="margin-bottom:16px"] {
+        flex-wrap: wrap;
+        gap: 10px;
+    }
+
+    /* Category & confidentiality segmented tabs stack full width */
+    .seg-tabs { width: 100%; }
+    .seg-tab { flex: 1; white-space: nowrap; }
+
+    /* Prepared-by panel keeps row layout but wraps long email */
+    .prepared-card .d-flex.align-items-center { flex-wrap: wrap; }
+
+    /* History row: compact date tile, actions stretch full width */
+    .history-row { grid-template-columns: auto minmax(0, 1fr); gap: 10px 12px; padding: 14px 16px; }
+    .history-date { width: 46px; height: 46px; border-radius: 11px; }
+    .hd-day { font-size: 17px; }
+    .hd-mon { font-size: 9px; }
+    .hd-time { font-size: 9px; }
+    .history-actions { justify-content: stretch; gap: 8px; }
+    .history-actions .hist-btn { flex: 1 1 0; justify-content: center; white-space: nowrap; }
+
+    /* Filter toolbar: search + filters full width */
+    .history-toolbar { padding: 12px; }
+    .ht-search, .ht-filters, .ht-select, .ht-date-range { width: 100%; }
+    .ht-filters .ht-select { flex: 1 1 auto; }
+    .ht-clear { width: 100%; }
+
+    /* Pagination buttons stretch nicely */
+    .pgn-btn { flex: 1; justify-content: center; }
+    .pgn-count { text-align: center; }
+
+    /* Sheet view header chips wrap below the name */
+    .sheet-actions .badge { font-size: 12px; padding: 5px 12px; }
+
+    /* Sheet view header (Prepared by): avatar + name on line 1, controls below */
+    .sheet-head { align-items: flex-start; }
+    .sheet-avatar { width: 44px; height: 44px; font-size: 15px; }
+    .sheet-creator { flex: 1 1 0; min-width: 0; }
+    .sheet-creator .creator-name,
+    .sheet-creator .creator-meta { overflow-wrap: anywhere; word-break: break-word; }
+    .sheet-actions {
+        flex: 1 1 100%;
+        margin-left: 0;
+        order: 2;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 8px;
+        padding-top: 2px;
+    }
+    .sheet-actions .btn,
+    .sheet-actions .badge { flex: 0 0 auto; white-space: nowrap; }
+
+    /* Sheet view meta row (Category / Submitted / Approvals): tighter gap */
+    .content-card > .d-flex[style*="gap:28px"] { gap: 12px 22px; row-gap: 14px; }
+
+    /* Share panel: stack the manual-email row and footer buttons on phones */
+    .content-card:has(.share-dropdown) .d-flex.gap-2.mb-3 { flex-direction: column; align-items: stretch; }
+    .content-card:has(.share-dropdown) .d-flex.gap-2.mb-3 .btn { width: 100%; }
+    .content-card:has(.share-dropdown) .d-flex.justify-content-end { flex-direction: column; align-items: stretch; }
+    .content-card:has(.share-dropdown) .d-flex.justify-content-end .btn { width: 100%; justify-content: center; }
+
+    /* Comment input + action zone stack */
+    .action-zone .d-flex.gap-2 { flex-direction: column; align-items: stretch; }
+    .action-zone .d-flex.gap-2 .btn { width: 100%; }
+
+    /* Auth pages: mobile-first (320-425px) — a centered, comfortable card */
+    .auth-wrap { padding: 28px 18px; gap: 24px; }
+    .auth-brand-head { gap: 12px; }
+    .auth-logo-box { padding: 9px 13px; border-radius: 10px; }
+    .auth-logo-box img { height: 30px; }
+    .auth-card {
+        flex: none;
+        width: 100%;
+        max-width: 390px;
+        min-width: 0;
+        margin-inline: auto;
+        padding: 30px 22px;
+        border-radius: 20px;
+    }
+    .auth-card .auth-title { font-size: 26px; margin-bottom: 4px; }
+    .auth-card .auth-subtitle { font-size: 14px; margin-bottom: 22px; line-height: 1.5; }
+    .auth-field { margin-bottom: 14px; }
+    .auth-field > label { font-size: 11px; margin-bottom: 7px; }
+    .auth-field .form-control, .auth-field .form-select {
+        padding: 13px 14px;
+        font-size: 16px;
+        border-radius: 12px;
+        box-shadow: inset 0 1px 2px rgba(0,0,60,0.04);
+    }
+    .auth-remember { flex-wrap: wrap; gap: 8px 12px; margin-bottom: 6px; }
+    .auth-remember label { font-size: 13.5px; }
+    .auth-remember a { font-size: 13.5px; }
+    .auth-card .btn-primary { padding: 14px; font-size: 15px; border-radius: 12px; margin-top: 8px; }
+    .auth-footer { font-size: 13.5px; margin-top: 18px; }
+}
+
+/* ---------- Very small screens (320px) ---------- */
+@media (max-width: 359.98px) {
+    .page-container { padding: 16px 10px 40px; }
+    .content-card { padding: 14px; }
+    .page-title { font-size: 19px; }
+
+    /* Keep avatars + user info from overflowing */
+    .avatar-wrap { flex-wrap: wrap; }
+
+    /* Compact stat cards */
+    .stat-card { padding: 14px; }
+    .stat-value { font-size: 26px; }
+
+    /* Admin stat cards: compact on 320px */
+    .as-stat { padding: 12px; gap: 10px; }
+    .as-stat-icon { width: 34px; height: 34px; }
+    .as-stat-value { font-size: 19px; }
+
+    /* Admin action buttons: compact inline, aligned left on 320px */
+    .as-table-wrap .table tbody td[data-label="Actions"] .d-inline-flex {
+        flex-direction: row;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 6px;
+    }
+    .as-table-wrap .table tbody td[data-label="Actions"] .btn {
+        width: auto;
+        flex: 0 0 auto;
+        padding: 5px 10px;
+        font-size: 12px;
+    }
+    .as-table-wrap .table tbody td[data-label="Actions"] .text-muted {
+        font-size: 11.5px !important;
+    }
+
+    /* Admin rows: slimmer padding so nothing overflows at 320px */
+    .as-table-wrap .table tbody tr { padding: 14px 12px; }
+    .as-table-wrap .table tbody td { gap: 3px; }
+    .as-table-wrap .table tbody td .as-sheet-title,
+    .as-table-wrap .table tbody td .avatar-wrap { width: 100%; }
+    .as-table-wrap .table tbody td[data-label="Actions"]::before { margin-bottom: 2px; }
+    .as-toolbar { padding: 10px; }
+
+    /* Auth pages: smallest phones (320px) — compact and balanced */
+    .auth-wrap { padding: 22px 14px; gap: 20px; }
+    .auth-logo-box { padding: 8px 10px; border-radius: 9px; }
+    .auth-logo-box img { height: 26px; }
+    .auth-card { padding: 24px 16px; border-radius: 18px; max-width: 320px; }
+    .auth-card .auth-title { font-size: 23px; }
+    .auth-field { margin-bottom: 12px; }
+    .auth-field > label { font-size: 10.5px; }
+    .auth-field .form-control, .auth-field .form-select { padding: 12px 13px; font-size: 16px; }
+    .auth-card .btn-primary { padding: 13px; }
+    .auth-subtitle { font-size: 13.5px; margin-bottom: 18px; }
+    .auth-footer { font-size: 13px; }
+}
+
 .sidebar {
     transition: width 0.25s ease-in-out !important;
 }
