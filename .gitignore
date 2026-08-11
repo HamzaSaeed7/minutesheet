@@ -35,6 +35,8 @@ project.fragment.lock.json
 secrets.json
 appsettings.*.local.json
 *.Development.local.json
+.env
+minutesheet/.env
 
 # Logs
 *.log
