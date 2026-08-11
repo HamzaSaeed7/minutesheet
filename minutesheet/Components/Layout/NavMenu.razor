@@ -1,4 +1,5 @@
 @implements IDisposable
+@rendermode InteractiveServer
 
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.AspNetCore.Identity
@@ -9,15 +10,33 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject UserManager<ApplicationUser> UserManager
 @inject IConfiguration Configuration
-@inject IJSRuntime JS
 <style>
     /* ---------- Sidebar collapse / expand ---------- */
+    .sb-brand {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        min-width: 0;
+        position: relative; /* anchor for the side arrow tab */
+        white-space: nowrap;
+    }
+
+    .sb-logo {
+        flex-shrink: 0;
+    }
+
+    .sb-title {
+        white-space: nowrap;
+        overflow: hidden;
+        min-width: 0;
+        flex: 1 1 auto;
+    }
+
     .sb-fold {
         width: 26px;
         height: 26px;
         border-radius: 50%;
         flex-shrink: 0;
-        margin-left: auto;
         display: flex;
         align-items: center;
         justify-content: center;
@@ -26,43 +45,122 @@
         color: #fff;
         cursor: pointer;
         transition: background .2s ease, transform .2s ease;
+        /* sits on the side edge of the sidebar, out of the text's flex flow */
+        position: absolute;
+        right: -13px;
+        top: 50%;
+        transform: translateY(-50%);
+        z-index: 10;
     }
 
         .sb-fold:hover {
             background: rgba(255, 255, 255, .18);
-            transform: rotate(-12deg);
         }
 
     .page > .sidebar {
         transition: width .25s ease;
     }
 
-    body.sb-collapsed .page > .sidebar {
-        width: 72px !important;
-    }
+        /* Collapsed = the sidebar shrinks to a narrow icon-only rail.
+           Driven purely by :has(), no JS interop / body class needed. */
+        .page > .sidebar:has(.sb.sb-collapsed) {
+            width: 76px !important;
+        }
 
-    body.sb-collapsed .sidebar .sb-brand {
+    .sb.sb-collapsed .sb-brand {
+        flex-direction: column;
         justify-content: center;
-        gap: 0 !important;
+        gap: 10px;
+        padding: 16px 0 14px;
+        min-height: 40px;
     }
 
-    body.sb-collapsed .sidebar .sb-title,
-    body.sb-collapsed .sidebar .sb-nav,
-    body.sb-collapsed .sidebar .sb-bottom,
-    body.sb-collapsed .sidebar .navbar-toggler {
+    .sb.sb-collapsed .sb-logo {
+        display: flex;
+        justify-content: center;
+        width: 100%;
+    }
+
+        .sb.sb-collapsed .sb-logo img {
+            height: auto !important;
+            width: 34px !important;
+            object-fit: contain;
+        }
+
+    .sb.sb-collapsed .sb-title {
+        display: none;
+    }
+
+    .sb.sb-collapsed .sb-fold {
+        position: static;
+        transform: none;
+        margin: 0 auto;
+    }
+
+    .sb.sb-collapsed .navbar-toggler {
         display: none !important;
     }
+
+    /* Nav links: keep icons, hide the text labels */
+    .sb.sb-collapsed .sb-link {
+        justify-content: center;
+        gap: 0;
+        padding-left: 0;
+        padding-right: 0;
+        position: relative;
+    }
+
+        .sb.sb-collapsed .sb-link span {
+            display: none;
+        }
+
+    /* Pending-count badge shrinks to a small dot instead of disappearing */
+    .sb.sb-collapsed .sb-badge {
+        position: absolute;
+        top: 2px;
+        right: 14px;
+        min-width: 8px;
+        width: 8px;
+        height: 8px;
+        padding: 0;
+        font-size: 0;
+        border-radius: 50%;
+    }
+
+    .sb.sb-collapsed .sb-section-divider {
+        display: none;
+    }
+
+    .sb.sb-collapsed .sb-user {
+        justify-content: center;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+    .sb.sb-collapsed .sb-user-info {
+        display: none;
+    }
+
+    .sb.sb-collapsed .sb-logout {
+        justify-content: center;
+        gap: 0;
+        padding-left: 0;
+        padding-right: 0;
+    }
+
+        .sb.sb-collapsed .sb-logout span {
+            display: none;
+        }
 </style>
 
 <div class="sb @(_collapsed ? "sb-collapsed" : "")">
-    <div class="sb-brand" title="@(_collapsed ? "Expand sidebar" : "Collapse sidebar")"
-         style="white-space:nowrap; min-width:0; gap:8px; cursor:pointer;" @onclick="ToggleSidebar">
+    <div class="sb-brand" title="Minute Sheet" style="min-width:0; gap:8px;">
         <div class="sb-logo" title="FFC — Partner in Prosperity" style="flex-shrink:0;">
             <img src="images/FFC-Logo-Blue-V3.webp" alt="FFC" style="height:26px; width:auto;" />
         </div>
-        <div class="sb-title" style="white-space:nowrap; overflow:hidden; text-overflow:ellipsis; min-width:0;">Minute Sheet</div>
+        <div class="sb-title" style="white-space:nowrap; overflow:hidden; min-width:0;">Minute Sheet</div>
         <button type="button" class="sb-fold" title="@(_collapsed ? "Expand sidebar" : "Collapse sidebar")"
-                @onclick="ToggleSidebar" @onclick:stopPropagation="true">
+                @onclick="ToggleSidebar">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
                 <path d="@(_collapsed ? "M9 18l6-6-6-6" : "M15 18l-6-6 6-6")"></path>
             </svg>
@@ -210,17 +308,9 @@
 
     public void Dispose() => NavigationManager.LocationChanged -= OnLocationChanged;
 
-    private async Task ToggleSidebar()
+    private void ToggleSidebar()
     {
         _collapsed = !_collapsed;
-        if (_collapsed)
-        {
-            await JS.InvokeVoidAsync("eval", "document.body.classList.add('sb-collapsed')");
-        }
-        else
-        {
-            await JS.InvokeVoidAsync("eval", "document.body.classList.remove('sb-collapsed')");
-        }
     }
 
     private static string DesignationName(Designation d)

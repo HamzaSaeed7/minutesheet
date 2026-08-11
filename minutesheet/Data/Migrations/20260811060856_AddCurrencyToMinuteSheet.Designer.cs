@@ -3,17 +3,20 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using minutesheet.Data;
 
 #nullable disable
 
-namespace minutesheet.Migrations
+namespace minutesheet.Data.Migrations
 {
     [DbContext(typeof(ApplicationDbContext))]
-    partial class ApplicationDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260811060856_AddCurrencyToMinuteSheet")]
+    partial class AddCurrencyToMinuteSheet
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -324,124 +327,6 @@ namespace minutesheet.Migrations
                         });
                 });
 
-            modelBuilder.Entity("minutesheet.Data.DomainVocabularyTerm", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int");
-
-                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("Aliases")
-                        .HasMaxLength(500)
-                        .HasColumnType("nvarchar(500)");
-
-                    b.Property<int>("Category")
-                        .HasColumnType("int");
-
-                    b.Property<bool>("IsActive")
-                        .HasColumnType("bit");
-
-                    b.Property<string>("Term")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("nvarchar(100)");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("DomainVocabularyTerms");
-
-                    b.HasData(
-                        new
-                        {
-                            Id = 1,
-                            Aliases = "Ahmed, Ahmet",
-                            Category = 0,
-                            IsActive = true,
-                            Term = "Ahmad"
-                        },
-                        new
-                        {
-                            Id = 2,
-                            Aliases = "Hamad",
-                            Category = 0,
-                            IsActive = true,
-                            Term = "Hammad"
-                        },
-                        new
-                        {
-                            Id = 3,
-                            Aliases = "Omair, Umer",
-                            Category = 0,
-                            IsActive = true,
-                            Term = "Umair"
-                        },
-                        new
-                        {
-                            Id = 4,
-                            Aliases = "Wakas, Wakkas",
-                            Category = 0,
-                            IsActive = true,
-                            Term = "Waqas"
-                        },
-                        new
-                        {
-                            Id = 5,
-                            Aliases = "MinuteSheet, Minutesheet",
-                            Category = 1,
-                            IsActive = true,
-                            Term = "Minute Sheet"
-                        },
-                        new
-                        {
-                            Id = 6,
-                            Aliases = "Git hub, Github",
-                            Category = 2,
-                            IsActive = true,
-                            Term = "GitHub"
-                        },
-                        new
-                        {
-                            Id = 7,
-                            Aliases = "Jeera, Geera",
-                            Category = 2,
-                            IsActive = true,
-                            Term = "Jira"
-                        },
-                        new
-                        {
-                            Id = 8,
-                            Aliases = "Blazer, Blazar",
-                            Category = 3,
-                            IsActive = true,
-                            Term = "Blazor"
-                        },
-                        new
-                        {
-                            Id = 9,
-                            Aliases = "Dot net, dotnet",
-                            Category = 3,
-                            IsActive = true,
-                            Term = ".NET"
-                        },
-                        new
-                        {
-                            Id = 10,
-                            Aliases = "Q A, cue a",
-                            Category = 4,
-                            IsActive = true,
-                            Term = "QA"
-                        },
-                        new
-                        {
-                            Id = 11,
-                            Aliases = "U A T, you a t",
-                            Category = 4,
-                            IsActive = true,
-                            Term = "UAT"
-                        });
-                });
-
             modelBuilder.Entity("minutesheet.Data.MinuteSheet", b =>
                 {
                     b.Property<int>("Id")
@@ -478,15 +363,9 @@ namespace minutesheet.Migrations
                         .HasMaxLength(10)
                         .HasColumnType("nvarchar(10)");
 
-                    b.Property<int?>("DepartmentId")
-                        .HasColumnType("int");
-
                     b.Property<string>("DescriptionHtml")
                         .IsRequired()
                         .HasColumnType("nvarchar(max)");
-
-                    b.Property<int?>("IntendedForDepartmentId")
-                        .HasColumnType("int");
 
                     b.Property<bool>("IsConfidential")
                         .HasColumnType("bit");
@@ -513,10 +392,6 @@ namespace minutesheet.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("CreatedByUserId");
-
-                    b.HasIndex("DepartmentId");
-
-                    b.HasIndex("IntendedForDepartmentId");
 
                     b.HasIndex("Token")
                         .IsUnique();
@@ -717,19 +592,7 @@ namespace minutesheet.Migrations
                         .OnDelete(DeleteBehavior.Restrict)
                         .IsRequired();
 
-                    b.HasOne("minutesheet.Data.Department", "Department")
-                        .WithMany()
-                        .HasForeignKey("DepartmentId");
-
-                    b.HasOne("minutesheet.Data.Department", "IntendedForDepartment")
-                        .WithMany()
-                        .HasForeignKey("IntendedForDepartmentId");
-
                     b.Navigation("CreatedByUser");
-
-                    b.Navigation("Department");
-
-                    b.Navigation("IntendedForDepartment");
                 });
 
             modelBuilder.Entity("minutesheet.Data.SheetComment", b =>

@@ -29,6 +29,18 @@ namespace minutesheet.Data
                 .HasForeignKey(m => m.CreatedByUserId)
                 .OnDelete(DeleteBehavior.Restrict);
 
+            // Two independent links to Department (initiator and recipient), so both
+            // are mapped explicitly rather than left to convention.
+            builder.Entity<MinuteSheet>()
+                .HasOne(m => m.Department)
+                .WithMany()
+                .HasForeignKey(m => m.DepartmentId);
+
+            builder.Entity<MinuteSheet>()
+                .HasOne(m => m.IntendedForDepartment)
+                .WithMany()
+                .HasForeignKey(m => m.IntendedForDepartmentId);
+
             builder.Entity<ApprovalStep>()
                 .HasOne(a => a.MinuteSheet)
                 .WithMany(m => m.ApprovalSteps)

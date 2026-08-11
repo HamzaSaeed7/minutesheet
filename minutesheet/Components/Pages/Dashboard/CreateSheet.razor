@@ -57,15 +57,59 @@ else
         </div>
 
         <div class="content-card">
-            <div class="card-eyebrow" style="margin-bottom:10px;">Category &amp; Confidentiality</div>
-            <div class="seg-tabs" style="margin-bottom:14px;">
-                <button type="button" class="seg-tab @(_category == SheetCategory.Financial ? "active" : "")" @onclick="() => _category = SheetCategory.Financial">Financial</button>
-                <button type="button" class="seg-tab @(_category == SheetCategory.NonFinancial ? "active" : "")" @onclick="() => _category = SheetCategory.NonFinancial">Non-Financial</button>
+            <div class="row g-2" style="margin-bottom:12px;">
+                <div class="col-lg-3 col-sm-6">
+                    <div class="card-eyebrow" style="margin-bottom:10px;">Category <span class="text-danger">*</span></div>
+                    <select class="form-select fw-normal" @bind="_categoryStr" @bind:after="OnCategoryChanged">
+                        <option value="Financial">Financial</option>
+                        <option value="NonFinancial">Non-Financial</option>
+                    </select>
+                </div>
+                <div class="col-lg-3 col-sm-6">
+                    <div class="card-eyebrow" style="margin-bottom:10px;">Confidentiality <span class="text-danger">*</span></div>
+                    <select class="form-select fw-normal" @bind="_isConfidentialStr">
+                        <option value="false">Non-Confidential</option>
+                        <option value="true">Confidential</option>
+                    </select>
+                </div>
+                <div class="col-lg-3 col-sm-6">
+                    <div class="card-eyebrow" style="margin-bottom:10px;">Initiated By <span class="text-danger">*</span></div>
+                    <select class="form-select fw-normal" @bind="_departmentId">
+                        @foreach (var dept in _departments)
+                        {
+                            <option value="@dept.Id">@dept.Name</option>
+                        }
+                    </select>
+                </div>
+                <div class="col-lg-3 col-sm-6">
+                    <div class="card-eyebrow" style="margin-bottom:10px;">Intended For <span class="text-danger">*</span></div>
+                    <select class="form-select fw-normal" @bind="_intendedForDepartmentId">
+                        @foreach (var dept in _departments)
+                        {
+                            <option value="@dept.Id">@dept.Name</option>
+                        }
+                    </select>
+                </div>
             </div>
-            <div class="seg-tabs">
-                <button type="button" class="seg-tab @(!_isConfidential ? "active" : "")" @onclick="() => _isConfidential = false">Non-Confidential</button>
-                <button type="button" class="seg-tab @(_isConfidential ? "active" : "")" @onclick="() => _isConfidential = true">Confidential</button>
-            </div>
+
+            @if (_category == SheetCategory.Financial)
+            {
+                <div style="margin-bottom:4px;">
+                    <div class="card-eyebrow" style="margin-bottom:10px;">Approval Amount</div>
+                    <div class="d-flex" style="gap:8px;">
+                        <select class="form-select fw-normal" style="width:110px; flex-shrink:0;" @bind="_currency">
+                            <option value="PKR">PKR</option>
+                            <option value="USD">USD</option>
+                            <option value="EUR">EUR</option>
+                            <option value="GBP">GBP</option>
+                            <option value="SAR">SAR</option>
+                            <option value="AED">AED</option>
+                        </select>
+                        <input type="number" class="form-control fw-normal" min="0" step="0.01" placeholder="Enter amount"
+                               @bind="_amount" @bind:event="oninput" />
+                    </div>
+                </div>
+            }
         </div>
 
         <div class="content-card">
@@ -212,6 +256,20 @@ else
     </div>
 
     <div class="d-flex flex-column" style="gap:16px;">
+        <div class="info-note">
+            @if (_workflowLocked)
+            {
+                <text>Approvals are already in progress. Updating the description or attachment here doesn't change the approval steps — use <strong>Resolve</strong> on the sheet to send a reviewed step back to its approver.</text>
+            }
+            else if (_isEdit)
+            {
+                <text>Saving will notify all approvers by email that the sheet was updated.</text>
+            }
+            else
+            {
+                <text>Approvers are notified by email as soon as you submit. Review steps require a comment before moving on; approval steps don't.</text>
+            }
+        </div>
         @if (_creator is not null)
         {
             <div class="prepared-card">
@@ -245,26 +303,12 @@ else
                 </div>
             </div>
         }
-        <div class="info-note">
-            @if (_workflowLocked)
-            {
-                <text>Approvals are already in progress. Updating the description or attachment here doesn't change the approval steps — use <strong>Resolve</strong> on the sheet to send a reviewed step back to its approver.</text>
-            }
-            else if (_isEdit)
-            {
-                <text>Saving will notify all approvers by email that the sheet was updated.</text>
-            }
-            else
-            {
-                <text>Approvers are notified by email as soon as you submit. Review steps require a comment before moving on; approval steps don't.</text>
-            }
-        </div>
         @if (_actionItems.Any() || _agendaItems.Any())
         {
             <div class="d-flex flex-column" style="gap: 16px;">
                 @if (_actionItems.Any())
                 {
-                    <div>
+                    <div class="content-card">
                         <div class="card-eyebrow" style="margin-bottom:6px; color:#000066;">Extracted Action Items</div>
                         <small class="text-muted d-block mb-2" style="font-size: 12px;">Click the pencil to edit a bullet, or the trash to remove it.</small>
 
@@ -299,7 +343,7 @@ else
 
                 @if (_agendaItems.Any())
                 {
-                    <div>
+                    <div class="content-card">
                         <div class="card-eyebrow" style="margin-bottom:6px; color:#000066;">Suggested Next-Meeting Agenda</div>
                         <small class="text-muted d-block mb-2" style="font-size: 12px;">Click the pencil to edit a bullet, or the trash to remove it.</small>
 
@@ -359,8 +403,15 @@ else
     private bool _generatingInsights;
 
     private string _title = "";
-    private SheetCategory _category = SheetCategory.Financial;
-    private bool _isConfidential;
+    private SheetCategory _category = SheetCategory.NonFinancial;
+    private string _categoryStr = "NonFinancial";
+    private decimal? _amount;
+    private string _currency = "PKR";
+    private bool _isConfidential = false;
+    private string _isConfidentialStr = "false";
+    private int? _departmentId;
+    private int? _intendedForDepartmentId;
+    private List<Department> _departments = new();
     private readonly List<ApprovalRow> _rows = new() { new ApprovalRow { Action = ApprovalAction.Review } };
     private List<string> _approverEmails = new();
     private ApplicationUser? _creator;
@@ -389,6 +440,13 @@ else
             .Select(u => u.Email!)
             .OrderBy(e => e)
             .ToListAsync();
+
+        _departments = await DbContext.Departments.OrderBy(d => d.Name).ToListAsync();
+        if (!_isEdit && _departments.Any())
+        {
+            _departmentId = _departments.First().Id;
+            _intendedForDepartmentId = _departments.First().Id;
+        }
 
         var authState = await AuthState;
         var userId = UserManager.GetUserId(authState.User);
@@ -435,7 +493,15 @@ else
                     creatorId = sheet.CreatedByUserId;
                     _title = sheet.Title;
                     _category = sheet.Category;
+                    _categoryStr = sheet.Category == SheetCategory.Financial ? "Financial" : "NonFinancial";
+                    _amount = sheet.Amount;
+                    _currency = sheet.Currency ?? "PKR";
+                    _departmentId = sheet.DepartmentId;
+                    // Sheets created before this field existed have no value; fall back
+                    // to the first option so the dropdown matches what it submits.
+                    _intendedForDepartmentId = sheet.IntendedForDepartmentId ?? _departments.FirstOrDefault()?.Id;
                     _isConfidential = sheet.IsConfidential;
+                    _isConfidentialStr = sheet.IsConfidential ? "true" : "false";
                     _initialDescriptionHtml = sheet.DescriptionHtml;
                     _existingAttachmentName = sheet.AttachmentFileName;
                     _existingAttachmentPath = sheet.AttachmentStoredPath;
@@ -558,6 +624,38 @@ else
                 return;
             }
 
+            if (string.IsNullOrEmpty(_categoryStr))
+            {
+                ToastService.ShowError("Please select a category.", "Missing category");
+                return;
+            }
+
+            if (_category == SheetCategory.Financial && _amount == null)
+            {
+                ToastService.ShowError("Please enter an approval amount.", "Missing amount");
+                return;
+            }
+
+            if (string.IsNullOrEmpty(_isConfidentialStr))
+            {
+                ToastService.ShowError("Please select confidentiality.", "Missing confidentiality");
+                return;
+            }
+
+            if (_departmentId == null)
+            {
+                ToastService.ShowError("Please select the department that initiated this sheet.", "Missing department");
+                return;
+            }
+
+            if (_intendedForDepartmentId == null)
+            {
+                ToastService.ShowError("Please select the department this sheet is intended for.", "Missing department");
+                return;
+            }
+
+            _isConfidential = _isConfidentialStr == "true";
+
             var authState = await AuthState;
             var user = await UserManager.GetUserAsync(authState.User);
             if (user is null)
@@ -619,6 +717,10 @@ else
 
                 sheet.Title = _title.Trim();
                 sheet.Category = _category;
+                sheet.Amount = _category == SheetCategory.Financial ? _amount : null;
+                sheet.Currency = _category == SheetCategory.Financial ? _currency : null;
+                sheet.DepartmentId = _departmentId;
+                sheet.IntendedForDepartmentId = _intendedForDepartmentId;
                 sheet.IsConfidential = _isConfidential;
                 sheet.DescriptionHtml = descriptionHtml;
                 sheet.Summary = _summary;
@@ -680,6 +782,10 @@ else
                 {
                     Title = _title.Trim(),
                     Category = _category,
+                    Amount = _category == SheetCategory.Financial ? _amount : null,
+                    Currency = _category == SheetCategory.Financial ? _currency : null,
+                    DepartmentId = _departmentId,
+                    IntendedForDepartmentId = _intendedForDepartmentId,
                     IsConfidential = _isConfidential,
                     DescriptionHtml = descriptionHtml,
                     Summary = _summary,
@@ -747,6 +853,30 @@ else
 
     [CascadingParameter]
     private Task<AuthenticationState> AuthState { get; set; } = default!;
+
+    private void OnCategoryChanged()
+    {
+        _category = _categoryStr == "Financial" ? SheetCategory.Financial : SheetCategory.NonFinancial;
+        if (_category == SheetCategory.NonFinancial)
+        {
+            _amount = null;
+            _currency = "PKR";
+        }
+    }
+
+    private void SetFinancial()
+    {
+        _category = SheetCategory.Financial;
+        _categoryStr = "Financial";
+    }
+
+    private void SetNonFinancial()
+    {
+        _category = SheetCategory.NonFinancial;
+        _categoryStr = "NonFinancial";
+        _amount = null;
+        _currency = "PKR";
+    }
 
     private static string LockedStatusName(ApprovalStepStatus s) => s switch
     {
