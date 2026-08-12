@@ -45,7 +45,7 @@
         <div class="history-toolbar">
             <div class="ht-search">
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"></circle><path d="M21 21l-4.3-4.3"></path></svg>
-                <input type="text" placeholder="Search by category, creator or attachment..." @bind="_search" @bind:event="oninput" @bind:after="ResetFiltersPage" />
+                <input type="text" placeholder="Search by title, category, creator, emp no or attachment..." @bind="_search" @bind:event="oninput" @bind:after="ResetFiltersPage" />
             </div>
             <div class="ht-filters">
                 <select class="ht-select" @bind="_statusFilter" @bind:after="ResetFiltersPage">
@@ -235,6 +235,7 @@
                 sheet.Category == SheetCategory.NonFinancial ? "Non-Financial" : "Financial",
                 sheet.CreatedByUser?.FullName ?? "",
                 sheet.CreatedByUser?.Email ?? "",
+                sheet.CreatedByUser?.EmployeeNo ?? "",
                 sheet.AttachmentFileName ?? ""
             });
             if (!haystack.Contains(term, StringComparison.OrdinalIgnoreCase)) return false;
@@ -325,6 +326,7 @@
                 .AsNoTracking()
                 .Where(m => m.CreatedByUserId == _userId
                             || (m.IsConfidential && m.ApprovalSteps.Any(s => s.ApproverEmail == _userEmail)))
+                .Include(m => m.CreatedByUser)
                 .Include(m => m.ApprovalSteps)
                 .OrderByDescending(m => m.CreatedAt)
                 .ToListAsync();
