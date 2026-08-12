@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Mvc;
 using minutesheet.Components;
 using minutesheet.Components.Account;
 using minutesheet.Data;
+using minutesheet.Data.Seed;
 using Polly;
 using Polly.Extensions.Http;
 
@@ -111,6 +112,11 @@ using (var scope = app.Services.CreateScope())
     var dbContext = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     await dbContext.Database.MigrateAsync();
 }
+
+// Restore the development data snapshot (departments, users, sheets, workflow
+// history) into an empty database. Runs before DbSeeder so the snapshot's own
+// admin account is used rather than a freshly generated one.
+await DatabaseSnapshotSeeder.SeedAsync(app.Services);
 
 // Seed roles (Admin/Employee) and the bootstrap admin account on startup.
 await DbSeeder.SeedAsync(app.Services);

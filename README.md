@@ -134,6 +134,27 @@ dotnet run --project minutesheet
 
 Then open the URL shown in the console (defaults: `http://localhost:5285`, `https://localhost:7054`).
 
+### 5. Seed data
+
+On startup in Development the app restores a snapshot of a working database from
+`minutesheet/Data/Seed/seed-data.json` — departments, users, minute sheets and their
+full approval/comment history — so a fresh clone comes up with realistic data instead
+of an empty dashboard.
+
+- Every seeded account signs in with the password `Abcd1234!`. The export carries **no
+  password hashes**, so real credentials never reach the repo.
+- Seeding is idempotent: rows already present (matched on their original primary key)
+  are skipped, so restarting never duplicates anything.
+- It is off outside Development. Override either way with:
+
+```bash
+dotnet user-secrets set "Seed:LoadSnapshot" "false"
+```
+
+To refresh the snapshot from your own database, re-export each table with
+`FOR JSON PATH` into the same file shape (`departments`, `users`, `userRoles`, `sheets`,
+`approvalSteps`, `comments`, `shares`, `suggestions`, `vocabulary`).
+
 ---
 
 ## Configuration reference
@@ -149,6 +170,9 @@ Then open the URL shown in the console (defaults: `http://localhost:5285`, `http
 - `Model`: Whisper model to use (e.g., `base`, `small`).
 
 `ConnectionStrings:DefaultConnection`: SQL Server connection string.
+
+`Seed:LoadSnapshot`: Restore `Data/Seed/seed-data.json` at startup. Defaults to on in
+Development, off elsewhere.
 
 ---
 
