@@ -212,9 +212,9 @@ else
             else
             {
                 <datalist id="approverEmailOptions">
-                    @foreach (var email in _approverEmails)
+                    @foreach (var u in _approverUsers)
                     {
-                        <option value="@email" />
+                        <option value="@u.Email">@($"{u.FullName} (Emp #{u.EmployeeNo}) - {u.Email}")</option>
                     }
                 </datalist>
                 <div class="d-flex flex-column" style="gap:10px;">
@@ -235,7 +235,7 @@ else
                                     <option value="@ApprovalAction.Approve">Approve</option>
                                 </select>
                             }
-                            <input list="approverEmailOptions" class="form-control form-control-sm wf-approver" placeholder="-- select approver --" @bind="row.ApproverEmail" @bind:event="oninput" />
+                            <input list="approverEmailOptions" class="form-control form-control-sm wf-approver" placeholder="Search by name, email, or employee number..." @bind="row.ApproverEmail" @bind:event="oninput" />
                             @if (_rows.Count > 1)
                             {
                                 <button type="button" class="wf-remove" @onclick="() => RemoveRow(row)">&times;</button>
@@ -413,7 +413,7 @@ else
     private int? _intendedForDepartmentId;
     private List<Department> _departments = new();
     private readonly List<ApprovalRow> _rows = new() { new ApprovalRow { Action = ApprovalAction.Review } };
-    private List<string> _approverEmails = new();
+    private List<ApplicationUser> _approverUsers = new();
     private ApplicationUser? _creator;
     private IBrowserFile? _selectedFile;
     private string? _error;
@@ -435,10 +435,9 @@ else
     protected override async Task OnInitializedAsync()
     {
         _objRef = DotNetObjectReference.Create(this);
-        _approverEmails = await DbContext.Users
+        _approverUsers = await DbContext.Users
             .Where(u => u.Email != null)
-            .Select(u => u.Email!)
-            .OrderBy(e => e)
+            .OrderBy(e => e.Email)
             .ToListAsync();
 
         _departments = await DbContext.Departments.OrderBy(d => d.Name).ToListAsync();
