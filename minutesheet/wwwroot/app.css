@@ -514,7 +514,8 @@ a, .btn-link {
 .as-stat-icon.bg-brand { background: var(--brand-tint); color: var(--brand); }
 .as-stat-icon.bg-ok { background: var(--ok-bg); color: var(--ok); }
 .as-stat-icon.bg-wait { background: var(--wait-bg); color: var(--wait); }
-.as-stat-icon.bg-info { background: #e7ecff; color: #4a5bd0; }
+/* !important is required: Bootstrap's .bg-info utility sets an !important cyan background. */
+.as-stat-icon.bg-info { background: var(--brand-tint) !important; color: var(--brand) !important; }
 .as-stat-label { font-size: 12px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
 .as-stat-value { font-family: 'Poppins', sans-serif; font-size: 24px; font-weight: 600; line-height: 1.15; color: var(--ink-strong); }
 
@@ -1299,7 +1300,7 @@ body[data-theme="dark"] {
         body[data-theme="dark"] .as-stat-icon.bg-brand { background: rgba(95, 109, 240, .16); color: #aab6ff; }
         body[data-theme="dark"] .as-stat-icon.bg-ok { background: rgba(61, 190, 132, .16); color: #7fdcb4; }
         body[data-theme="dark"] .as-stat-icon.bg-wait { background: rgba(255, 180, 64, .16); color: #ffc97a; }
-        body[data-theme="dark"] .as-stat-icon.bg-info { background: rgba(74, 91, 208, .2); color: #aab6ff; }
+        body[data-theme="dark"] .as-stat-icon.bg-info { background: rgba(95, 109, 240, .16) !important; color: #aab6ff !important; }
 
         body[data-theme="dark"] .ht-date {
             background: var(--card);
