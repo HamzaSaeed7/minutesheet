@@ -63,6 +63,10 @@
         transition: width .25s ease;
     }
 
+    /* Collapse/expand only applies on desktop (>= 992px). On mobile &
+       tablet the top header must stay fixed and static regardless of the
+       desktop collapse state, so the collapse rules below are desktop-only. */
+    @@media (min-width: 992px) {
         /* Collapsed = the sidebar shrinks to a narrow icon-only rail.
            Driven purely by :has(), no JS interop / body class needed. */
         .page > .sidebar:has(.sb.sb-collapsed) {
@@ -153,6 +157,7 @@
         .sb.sb-collapsed .sb-logout span {
             display: none;
         }
+    }
 
     @@media (max-width: 991.98px) {
         body:has(.navbar-toggler:checked) {
