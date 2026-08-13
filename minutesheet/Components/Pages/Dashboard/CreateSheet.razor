@@ -58,21 +58,21 @@ else
 
         <div class="content-card">
             <div class="row g-2" style="margin-bottom:12px;">
-                <div class="col-lg-3 col-sm-6">
+                <div class="col-xl-3 col-sm-6">
                     <div class="card-eyebrow" style="margin-bottom:10px;">Category <span class="text-danger">*</span></div>
                     <select class="form-select fw-normal" @bind="_categoryStr" @bind:after="OnCategoryChanged">
                         <option value="Financial">Financial</option>
                         <option value="NonFinancial">Non-Financial</option>
                     </select>
                 </div>
-                <div class="col-lg-3 col-sm-6">
+                <div class="col-xl-3 col-sm-6">
                     <div class="card-eyebrow" style="margin-bottom:10px;">Confidentiality <span class="text-danger">*</span></div>
                     <select class="form-select fw-normal" @bind="_isConfidentialStr">
                         <option value="false">Non-Confidential</option>
                         <option value="true">Confidential</option>
                     </select>
                 </div>
-                <div class="col-lg-3 col-sm-6">
+                <div class="col-xl-3 col-sm-6">
                     <div class="card-eyebrow" style="margin-bottom:10px;">Initiated By <span class="text-danger">*</span></div>
                     <select class="form-select fw-normal" @bind="_departmentId">
                         @foreach (var dept in _departments)
@@ -81,7 +81,7 @@ else
                         }
                     </select>
                 </div>
-                <div class="col-lg-3 col-sm-6">
+                <div class="col-xl-3 col-sm-6">
                     <div class="card-eyebrow" style="margin-bottom:10px;">Intended For <span class="text-danger">*</span></div>
                     <select class="form-select fw-normal" @bind="_intendedForDepartmentId">
                         @foreach (var dept in _departments)

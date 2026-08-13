@@ -742,6 +742,9 @@
         .trend-chart svg {
             display: block;
             width: 100%;
+            height: auto;
+            aspect-ratio: 300 / 120;
+            min-height: 120px;
         }
 
     .trend-labels {
@@ -1304,7 +1307,7 @@
             </div>
             <div class="trend-num">@_approved</div>
             <div class="trend-chart">
-                <svg viewBox="0 0 300 120" width="100%" height="120" preserveAspectRatio="none">
+                <svg viewBox="0 0 300 120">
                     <defs>
                         <linearGradient id="trendFillGrad" x1="0" y1="0" x2="0" y2="1">
                             <stop offset="0%" stop-color="#4f46e5" stop-opacity="0.35"></stop>

@@ -1544,6 +1544,11 @@ body {
 
 /* ---------- Tablet and below (also covers 768px) ---------- */
 @media (max-width: 991.98px) {
+    /* Keep toasts clear of the fixed top header (and its hamburger toggle on
+       the right), which would otherwise sit under the toast after login and
+       swallow the first clicks. */
+    .ms-toast-viewport { top: 96px; }
+
     /* Actions grid: collapse the 5/4-column grids into 2 columns */
     .act-head,
     .act-row { grid-template-columns: 1fr 1fr !important; gap: 10px 18px; }
@@ -1788,6 +1793,40 @@ body {
 
     /* Forms: give inputs a comfortable tap target */
     .form-control, .form-select { font-size: 16px; }}
+
+/* Department page only: keep the aligned three-column table on tablet instead
+   of flipping it into two-column cards, so Department / Employees / Actions
+   line up exactly like they do on the laptop. Only three light columns, so it
+   fits fine at tablet width; phones keep the stacked card layout below. */
+@media (max-width: 767.98px) and (min-width: 576px) {
+    .history-card:has(.as-add) .as-table-wrap { overflow-x: auto; }
+    .history-card:has(.as-add) .as-table-wrap .table { min-width: 0; }
+    .history-card:has(.as-add) .as-table-wrap .table thead { display: table-header-group; }
+    .history-card:has(.as-add) .as-table-wrap .table tbody { display: table-row-group; }
+    .history-card:has(.as-add) .as-table-wrap .table tbody tr {
+        display: table-row;
+        gap: 0;
+        padding: 0;
+        border-radius: 0;
+    }
+    .history-card:has(.as-add) .as-table-wrap .table tbody tr:last-child { border-bottom: none; }
+    .history-card:has(.as-add) .as-table-wrap .table tbody td {
+        display: table-cell;
+        border: none;
+        border-top: 1px solid var(--divider);
+        padding: 14px;
+        min-width: 0;
+        max-width: none;
+        vertical-align: middle;
+    }
+    .history-card:has(.as-add) .as-table-wrap .table tbody td[data-label]::before { content: none; }
+    .history-card:has(.as-add) .as-table-wrap .table tbody td[data-label="Actions"] {
+        grid-column: auto;
+        align-items: center;
+        margin-top: 0;
+    }
+    .history-card:has(.as-add) .as-table-wrap .table tbody td .avatar-wrap { display: inline-flex; }
+}
 
 /* ---------- Mobile (425px / 375px / 320px) ---------- */
 @media (max-width: 575.98px) {

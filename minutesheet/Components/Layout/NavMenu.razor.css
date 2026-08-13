@@ -189,7 +189,6 @@
 
 @media (max-width: 991.98px) {
     .navbar-toggler {
-        position: fixed;
         z-index: 1051;
     }
 
