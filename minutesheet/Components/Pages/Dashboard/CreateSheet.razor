@@ -1215,7 +1215,8 @@ else
                         ? _creator.Email
                         : $"{_creator.FullName} ({_creator.Email})",
                 Description: HtmlToPlainText(descriptionHtml),
-                Summary: _summary);
+                Summary: _summary,
+                LogoPng: SheetExporter.LogoPng(Env.WebRootPath));
 
             byte[] bytes;
             string mime;
