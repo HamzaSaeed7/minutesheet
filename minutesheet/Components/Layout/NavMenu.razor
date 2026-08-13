@@ -41,7 +41,9 @@
         align-items: center;
         justify-content: center;
         border: 1px solid rgba(255, 255, 255, .35);
-        background: rgba(255, 255, 255, .08);
+        /* opaque: half the chip overhangs the sidebar onto the light page,
+           so a translucent fill would disappear on that side */
+        background: #14173a;
         color: #fff;
         cursor: pointer;
         transition: background .2s ease, transform .2s ease;
@@ -54,7 +56,7 @@
     }
 
         .sb-fold:hover {
-            background: rgba(255, 255, 255, .18);
+            background: #262a5c;
         }
 
     .page > .sidebar {

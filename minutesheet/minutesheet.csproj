@@ -21,4 +21,9 @@
     <PackageReference Include="UglyToad.PdfPig" Version="1.7.0-custom-5" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Development data snapshot restored by DatabaseSnapshotSeeder at startup. -->
+    <Content Update="Data\Seed\seed-data.json" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>
