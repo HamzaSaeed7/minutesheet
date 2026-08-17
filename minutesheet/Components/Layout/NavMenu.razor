@@ -12,17 +12,30 @@
 @inject IConfiguration Configuration
 <style>
     /* ---------- Sidebar collapse / expand ---------- */
+    .sb {
+        position: relative;
+        z-index: 5;
+    }
+
     .sb-brand {
         display: flex;
         align-items: center;
-        gap: 8px;
+        gap: 6px;
         min-width: 0;
-        position: relative; /* anchor for the side arrow tab */
         white-space: nowrap;
+        position: relative; /* anchor for the edge arrow tab */
     }
 
     .sb-logo {
         flex-shrink: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 5px 7px !important;
+    }
+
+    .sb-logo-mini {
+        display: none;
     }
 
     .sb-title {
@@ -30,6 +43,8 @@
         overflow: hidden;
         min-width: 0;
         flex: 1 1 auto;
+        font-size: 15px;
+        letter-spacing: -0.01em;
     }
 
     .sb-fold {
@@ -47,16 +62,22 @@
         color: #fff;
         cursor: pointer;
         transition: background .2s ease, transform .2s ease;
-        /* sits on the side edge of the sidebar, out of the text's flex flow */
+        box-shadow: 0 2px 6px rgba(0, 0, 0, .35);
+        /* sits on the sidebar's edge, above everything else */
         position: absolute;
         right: -13px;
         top: 50%;
         transform: translateY(-50%);
-        z-index: 10;
+        z-index: 50;
     }
 
         .sb-fold:hover {
-            background: #262a5c;
+            background: #323863;
+        }
+
+        .sb-fold svg {
+            width: 14px;
+            height: 14px;
         }
 
     .page > .sidebar {
@@ -77,17 +98,17 @@
         min-height: 40px;
     }
 
-    .sb.sb-collapsed .sb-logo {
-        display: flex;
-        justify-content: center;
-        width: 100%;
+    .sb.sb-collapsed .sb-logo-full {
+        display: block !important;
+        width: 46px !important;
+        height: auto !important;
+        max-width: 80%;
+        object-fit: contain;
     }
 
-        .sb.sb-collapsed .sb-logo img {
-            height: auto !important;
-            width: 34px !important;
-            object-fit: contain;
-        }
+    .sb.sb-collapsed .sb-logo-mini {
+        display: none;
+    }
 
     .sb.sb-collapsed .sb-title {
         display: none;
@@ -97,6 +118,25 @@
         position: static;
         transform: none;
         margin: 0 auto;
+        width: 32px;
+        height: 32px;
+    }
+
+        .sb.sb-collapsed .sb-fold svg {
+            width: 16px;
+            height: 16px;
+        }
+
+    /* Icon-only rail: bigger icons since there's no label text next to them */
+    .sb.sb-collapsed .sb-link svg,
+    .sb.sb-collapsed .sb-logout svg {
+        width: 22px !important;
+        height: 22px !important;
+    }
+
+    .sb.sb-collapsed .sb-avatar {
+        width: 34px !important;
+        height: 34px !important;
     }
 
     .sb.sb-collapsed .navbar-toggler {
@@ -153,18 +193,12 @@
         .sb.sb-collapsed .sb-logout span {
             display: none;
         }
-
-    @@media (max-width: 991.98px) {
-        body:has(.navbar-toggler:checked) {
-            overflow: hidden !important;
-        }
-    }
 </style>
 
 <div class="sb @(_collapsed ? "sb-collapsed" : "")">
     <div class="sb-brand" title="Minute Sheet" style="min-width:0; gap:8px;">
         <div class="sb-logo" title="FFC — Partner in Prosperity" style="flex-shrink:0;">
-            <img src="images/FFC-Logo-Blue-V3.webp" alt="FFC" style="height:26px; width:auto;" />
+            <img src="images/FFC-Logo-Blue-V3.webp" alt="FFC" class="sb-logo-full" style="height:26px; width:auto;" />
         </div>
         <div class="sb-title" style="white-space:nowrap; overflow:hidden; min-width:0;">Minute Sheet</div>
         <button type="button" class="sb-fold" title="@(_collapsed ? "Expand sidebar" : "Collapse sidebar")"
@@ -304,14 +338,7 @@
                 .Where(s => s.ApproverEmail == email && s.Status != ApprovalStepStatus.Approved)
                 .Include(s => s.MinuteSheet!).ThenInclude(m => m.ApprovalSteps)
                 .ToListAsync();
-            var approverPending = mySteps.Count(s => s.Status == ApprovalStepStatus.Pending && ApprovalWorkflow.IsActionable(s, s.MinuteSheet!.ApprovalSteps));
-
-            // Also count sheets this user created that have been returned (reviewed) and need resolution.
-            var returnedCount = await db.MinuteSheets
-                .Where(m => m.CreatedByUserId == userId && m.ApprovalSteps.Any(s => s.Status == ApprovalStepStatus.Reviewed))
-                .CountAsync();
-
-            _pendingCount = approverPending + returnedCount;
+            _pendingCount = mySteps.Count(s => ApprovalWorkflow.IsActionable(s, s.MinuteSheet!.ApprovalSteps));
         }
     }
 
