@@ -5,6 +5,7 @@ using DocumentFormat.OpenXml.Wordprocessing;
 using PdfSharp.Drawing;
 using PdfSharp.Fonts;
 using PdfSharp.Pdf;
+using SkiaSharp;
 
 namespace minutesheet.Services;
 
@@ -29,10 +30,64 @@ public static class SheetExporter
         string Date,
         string PreparedBy,
         string Description,
-        string Summary);
+        string Summary,
+        byte[]? LogoPng = null);
 
     private const double Margin = 48;          // PDF points (~16.9mm)
     private const double PdfPageWidth = 595;   // A4 in points
+
+    private static byte[]? _cachedLogoPng;
+    private static readonly object LogoLock = new();
+
+    /// <summary>
+    /// Loads the FFC logo (WebP) from wwwroot and converts it to PNG so
+    /// PdfSharp/OpenXml can embed it. Cached across calls.
+    /// </summary>
+    public static byte[]? LogoPng(string? webRootPath)
+    {
+        if (_cachedLogoPng is not null)
+        {
+            return _cachedLogoPng;
+        }
+
+        lock (LogoLock)
+        {
+            if (_cachedLogoPng is not null)
+            {
+                return _cachedLogoPng;
+            }
+
+            if (string.IsNullOrWhiteSpace(webRootPath))
+            {
+                return null;
+            }
+
+            var file = Path.Combine(webRootPath, "images", "FFC-Logo-Blue-V3.webp");
+            if (!File.Exists(file))
+            {
+                return null;
+            }
+
+            try
+            {
+                using var data = SKData.Create(file);
+                using var bitmap = SKBitmap.Decode(data);
+                if (bitmap is null)
+                {
+                    return null;
+                }
+
+                using var png = bitmap.Encode(SKEncodedImageFormat.Png, 100);
+                _cachedLogoPng = png?.ToArray();
+            }
+            catch
+            {
+                _cachedLogoPng = null;
+            }
+
+            return _cachedLogoPng;
+        }
+    }
 
     public static byte[] BuildDocx(ExportContent c)
     {
@@ -43,8 +98,34 @@ public static class SheetExporter
             main.Document = new Document();
             var body = main.Document.AppendChild(new Body());
 
-            body.AppendChild(new SectionProperties(
-                new PageMargin { Top = 1100, Bottom = 1100, Left = 1400, Right = 1400 }));
+            if (c.LogoPng is { Length: > 0 })
+            {
+                var imagePart = main.AddImagePart(ImagePartType.Png);
+                using (var imgStream = new MemoryStream(c.LogoPng))
+                {
+                    imagePart.FeedData(imgStream);
+                }
+
+                var widthPx = 384;
+                var heightPx = 128;
+                try
+                {
+                    var dims = ImageDimensions(c.LogoPng);
+                    widthPx = dims.Width;
+                    heightPx = dims.Height;
+                }
+                catch
+                {
+                    // fall back to defaults
+                }
+
+                var logo = new Paragraph(new ParagraphProperties(
+                    new SpacingBetweenLines { After = "160" },
+                    new Justification { Val = JustificationValues.Center }));
+                var drawing = BuildLogoDrawing(main.GetIdOfPart(imagePart), widthPx, heightPx);
+                logo.AppendChild(new Run(drawing));
+                body.AppendChild(logo);
+            }
 
             AddParagraph(body, "FFC Fertilizers", bold: true, size: 28, center: true);
             AddParagraph(body, c.Title, bold: true, size: 20, center: true);
@@ -64,6 +145,9 @@ public static class SheetExporter
                 AddHeading(body, "Summary (AI Generated)");
                 AddBodyParagraph(body, c.Summary);
             }
+
+            body.AppendChild(new SectionProperties(
+                new PageMargin { Top = 1100, Bottom = 1100, Left = 1400, Right = 1400 }));
         }
         return stream.ToArray();
     }
@@ -110,24 +194,42 @@ public static class SheetExporter
         double y = Margin;
         double right = PdfPageWidth - Margin;
 
-        y = DrawWrapped(gfx, c.Title, titleFont, y, right, center: true);
-        y = DrawWrapped(gfx, "FFC Fertilizers", metaFont, y, right, center: true);
+        if (c.LogoPng is { Length: > 0 })
+        {
+            try
+            {
+                using var imgStream = new MemoryStream(c.LogoPng);
+                var logo = XImage.FromStream(imgStream);
+                double logoWidth = 140;
+                double logoHeight = logo.PixelHeight * (logoWidth / logo.PixelWidth);
+                double x = (PdfPageWidth - logoWidth) / 2;
+                gfx.DrawImage(logo, x, y, logoWidth, logoHeight);
+                y += logoHeight + 10;
+            }
+            catch
+            {
+                // Logo is decorative; continue without it.
+            }
+        }
+
+        y = DrawWrapped(ref gfx, c.Title, titleFont, y, right, center: true);
+        y = DrawWrapped(ref gfx, "FFC Fertilizers", metaFont, y, right, center: true);
         y += 10;
 
-        y = DrawWrapped(gfx, "Category: " + c.Category, metaFont, y, right);
-        y = DrawWrapped(gfx, "Confidentiality: " + c.Confidentiality, metaFont, y, right);
-        y = DrawWrapped(gfx, "Date: " + c.Date, metaFont, y, right);
-        y = DrawWrapped(gfx, "Prepared by: " + c.PreparedBy, metaFont, y, right);
+        y = DrawWrapped(ref gfx, "Category: " + c.Category, metaFont, y, right);
+        y = DrawWrapped(ref gfx, "Confidentiality: " + c.Confidentiality, metaFont, y, right);
+        y = DrawWrapped(ref gfx, "Date: " + c.Date, metaFont, y, right);
+        y = DrawWrapped(ref gfx, "Prepared by: " + c.PreparedBy, metaFont, y, right);
         y += 10;
 
-        y = DrawWrapped(gfx, "Description", headingFont, y, right);
-        y = DrawWrapped(gfx, c.Description, bodyFont, y, right);
+        y = DrawWrapped(ref gfx, "Description", headingFont, y, right);
+        y = DrawWrapped(ref gfx, c.Description, bodyFont, y, right);
         y += 8;
 
         if (!string.IsNullOrWhiteSpace(c.Summary))
         {
-            y = DrawWrapped(gfx, "Summary (AI Generated)", headingFont, y, right);
-            y = DrawWrapped(gfx, c.Summary, bodyFont, y, right);
+            y = DrawWrapped(ref gfx, "Summary (AI Generated)", headingFont, y, right);
+            y = DrawWrapped(ref gfx, c.Summary, bodyFont, y, right);
         }
 
         gfx.Dispose();
@@ -137,7 +239,7 @@ public static class SheetExporter
     }
 
     private static double DrawWrapped(
-        XGraphics gfx, string text, XFont font, double y, double right,
+        ref XGraphics gfx, string text, XFont font, double y, double right,
         bool center = false, double maxY = PdfPageWidth * 1.4142 - 48)
     {
         if (string.IsNullOrEmpty(text))
@@ -149,52 +251,113 @@ public static class SheetExporter
         var lineHeight = font.GetHeight() * lineHeightFactor;
         var leading = font.GetHeight();
 
-        foreach (var line in Wrap(text, font, gfx, right - Margin))
-        {
-            if (y + lineHeight > maxY)
-            {
-                gfx.Dispose();
-                var page = gfx.PdfPage.Owner.AddPage();
-                gfx = XGraphics.FromPdfPage(page);
-                y = Margin;
-            }
-
-            var size = gfx.MeasureString(line, font);
-            var x = center ? (PdfPageWidth - size.Width) / 2 : Margin;
-            gfx.DrawString(line, font, XBrushes.Black, new XPoint(x, y + leading));
-            y += lineHeight;
-        }
-        return y + 4;
-    }
-
-    private static IEnumerable<string> Wrap(string text, XFont font, XGraphics gfx, double maxWidth)
-    {
         var normalized = text.Replace("\r\n", "\n").Replace('\r', '\n');
         foreach (var paragraph in normalized.Split('\n'))
         {
             var words = paragraph.Split(' ', StringSplitOptions.RemoveEmptyEntries);
             if (words.Length == 0)
             {
-                yield return "";
-                continue;
+                words = new[] { "" };
             }
 
             var line = words[0];
             for (var i = 1; i < words.Length; i++)
             {
                 var candidate = line + " " + words[i];
-                if (gfx.MeasureString(candidate, font).Width <= maxWidth)
+                if (gfx.MeasureString(candidate, font).Width <= right - Margin)
                 {
                     line = candidate;
                 }
                 else
                 {
-                    yield return line;
+                    gfx = DrawLine(gfx, line, font, y, right, center, lineHeight, leading, maxY, out y);
                     line = words[i];
                 }
             }
-            yield return line;
+            gfx = DrawLine(gfx, line, font, y, right, center, lineHeight, leading, maxY, out y);
         }
+        return y + 4;
+    }
+
+    private static XGraphics DrawLine(
+        XGraphics gfx, string line, XFont font, double y, double right,
+        bool center, double lineHeight, double leading, double maxY, out double newY)
+    {
+        if (y + lineHeight > maxY)
+        {
+            var owner = gfx.PdfPage.Owner;
+            gfx.Dispose();
+            var page = owner.AddPage();
+            gfx = XGraphics.FromPdfPage(page);
+            y = Margin;
+        }
+
+        var size = gfx.MeasureString(line, font);
+        var x = center ? (PdfPageWidth - size.Width) / 2 : Margin;
+        gfx.DrawString(line, font, XBrushes.Black, new XPoint(x, y + leading));
+        newY = y + lineHeight;
+        return gfx;
+    }
+
+    private static (int Width, int Height) ImageDimensions(byte[] png)
+    {
+        using var bitmap = SKBitmap.Decode(png);
+        return bitmap is null ? (384, 128) : (bitmap.Width, bitmap.Height);
+    }
+
+    private static Drawing BuildLogoDrawing(string relationshipId, int widthPx, int heightPx)
+    {
+        const double emuPerPx = 9525;                 // 1px = 9525 EMU at 96 DPI
+        var extCx = (long)(widthPx * emuPerPx);
+        var extCy = (long)(heightPx * emuPerPx);
+
+        var extent = new DocumentFormat.OpenXml.Drawing.Wordprocessing.Extent { Cx = extCx, Cy = extCy };
+        var docProperties = new DocumentFormat.OpenXml.Drawing.Wordprocessing.DocProperties
+        {
+            Id = 1U,
+            Name = "FFCLogo"
+        };
+
+        var blipFill = new DocumentFormat.OpenXml.Drawing.Pictures.BlipFill(
+            new DocumentFormat.OpenXml.Drawing.Blip { Embed = relationshipId },
+            new DocumentFormat.OpenXml.Drawing.Stretch(
+                new DocumentFormat.OpenXml.Drawing.FillRectangle()));
+
+        var shapeProperties = new DocumentFormat.OpenXml.Drawing.Pictures.ShapeProperties(
+            new DocumentFormat.OpenXml.Drawing.Transform2D(
+                new DocumentFormat.OpenXml.Drawing.Offset { X = 0L, Y = 0L },
+                new DocumentFormat.OpenXml.Drawing.Extents { Cx = extCx, Cy = extCy }),
+            new DocumentFormat.OpenXml.Drawing.PresetGeometry(
+                new DocumentFormat.OpenXml.Drawing.AdjustValueList())
+            { Preset = DocumentFormat.OpenXml.Drawing.ShapeTypeValues.Rectangle });
+
+        var picture = new DocumentFormat.OpenXml.Drawing.Pictures.Picture(
+            new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualPictureProperties(
+                new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualDrawingProperties
+                {
+                    Id = 1U,
+                    Name = "FFCLogo"
+                },
+                new DocumentFormat.OpenXml.Drawing.Pictures.NonVisualPictureDrawingProperties()),
+            blipFill,
+            shapeProperties);
+
+        var graphic = new DocumentFormat.OpenXml.Drawing.Graphic(
+            new DocumentFormat.OpenXml.Drawing.GraphicData(picture)
+            { Uri = "http://schemas.openxmlformats.org/drawingml/2006/picture" });
+
+        var inline = new DocumentFormat.OpenXml.Drawing.Wordprocessing.Inline(
+            extent,
+            docProperties,
+            graphic)
+        {
+            DistanceFromTop = 0U,
+            DistanceFromBottom = 0U,
+            DistanceFromLeft = 0U,
+            DistanceFromRight = 0U
+        };
+
+        return new Drawing(inline);
     }
 
     private static void AddParagraph(Body body, string text, bool bold, int size, bool center = false)
@@ -206,13 +369,7 @@ public static class SheetExporter
         }
         var run = new Run();
         run.AppendChild(new Text(text) { Space = SpaceProcessingModeValues.Preserve });
-        var props = new RunProperties(new FontSize { Val = (size * 2).ToString() });
-        if (bold)
-        {
-            props.AppendChild(new Bold());
-        }
-        props.AppendChild(new RunFonts { Ascii = "Arial", HighAnsi = "Arial" });
-        run.PrependChild(props);
+        run.PrependChild(NewRunProperties(size, bold));
         para.AppendChild(run);
         body.AppendChild(para);
     }
@@ -221,10 +378,10 @@ public static class SheetExporter
     {
         var para = new Paragraph();
         var boldRun = new Run();
-        boldRun.AppendChild(new RunProperties(new Bold()) { RunFonts = new RunFonts { Ascii = "Arial", HighAnsi = "Arial" } });
+        boldRun.AppendChild(NewRunProperties(11, bold: true));
         boldRun.AppendChild(new Text($"{label}: "));
         var valueRun = new Run();
-        valueRun.AppendChild(new RunProperties(new FontSize { Val = "20" }) { RunFonts = new RunFonts { Ascii = "Arial", HighAnsi = "Arial" } });
+        valueRun.AppendChild(NewRunProperties(10, bold: false));
         valueRun.AppendChild(new Text(value ?? "") { Space = SpaceProcessingModeValues.Preserve });
         para.AppendChild(boldRun);
         para.AppendChild(valueRun);
@@ -236,7 +393,7 @@ public static class SheetExporter
         var para = new Paragraph();
         para.AppendChild(new ParagraphProperties(new SpacingBetweenLines { Before = "240", After = "120" }));
         var run = new Run();
-        run.AppendChild(new RunProperties(new Bold()) { FontSize = new FontSize { Val = "26" }, RunFonts = new RunFonts { Ascii = "Arial", HighAnsi = "Arial" } });
+        run.AppendChild(NewRunProperties(13, bold: true));
         run.AppendChild(new Text(text));
         para.AppendChild(run);
         body.AppendChild(para);
@@ -249,11 +406,26 @@ public static class SheetExporter
             var para = new Paragraph();
             para.AppendChild(new ParagraphProperties(new SpacingBetweenLines { After = "120" }));
             var run = new Run();
-            run.AppendChild(new RunProperties(new FontSize { Val = "20" }) { RunFonts = new RunFonts { Ascii = "Arial", HighAnsi = "Arial" } });
+            run.AppendChild(NewRunProperties(10, bold: false));
             run.AppendChild(new Text(paragraph) { Space = SpaceProcessingModeValues.Preserve });
             para.AppendChild(run);
             body.AppendChild(para);
         }
+    }
+
+    /// <summary>
+    /// Builds a RunProperties with children in schema order: rFonts, b, sz.
+    /// </summary>
+    private static RunProperties NewRunProperties(int fontSizePt, bool bold)
+    {
+        var props = new RunProperties();
+        props.AppendChild(new RunFonts { Ascii = "Arial", HighAnsi = "Arial" });
+        if (bold)
+        {
+            props.AppendChild(new Bold());
+        }
+        props.AppendChild(new FontSize { Val = (fontSizePt * 2).ToString() });
+        return props;
     }
 
     private static string Escape(string s)
